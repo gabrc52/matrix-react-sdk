@@ -71,9 +71,9 @@ export interface IMatrixClientPeg {
      *
      * @returns {string} The homeserver name, if present.
      */
-    getHomeserverName(): string | null;
+    getHomeserverName(): string;
 
-    get(): MatrixClient;
+    get(): MatrixClient | null;
     safeGet(): MatrixClient;
     unset(): void;
     assign(): Promise<any>;
@@ -142,7 +142,7 @@ class MatrixClientPegClass implements IMatrixClientPeg {
     // used if we tear it down & recreate it with a different store
     private currentClientCreds: IMatrixClientCreds | null = null;
 
-    public get(): MatrixClient {
+    public get(): MatrixClient | null {
         return this.matrixClient;
     }
 
@@ -273,8 +273,6 @@ class MatrixClientPegClass implements IMatrixClientPeg {
             SlidingSyncManager.instance.startSpidering(100, 50); // 100 rooms at a time, 50ms apart
         }
 
-        opts.intentionalMentions = SettingsStore.getValue("feature_intentional_mentions");
-
         // Connect the matrix client to the dispatcher and setting handlers
         MatrixActionCreators.start(this.matrixClient);
         MatrixClientBackedSettingsHandler.matrixClient = this.matrixClient;
@@ -360,10 +358,8 @@ class MatrixClientPegClass implements IMatrixClientPeg {
         };
     }
 
-    public getHomeserverName(): string | null {
-        if (!this.matrixClient) return null;
-
-        const matches = /^@[^:]+:(.+)$/.exec(this.matrixClient.getSafeUserId());
+    public getHomeserverName(): string {
+        const matches = /^@[^:]+:(.+)$/.exec(this.safeGet().getSafeUserId());
         if (matches === null || matches.length < 1) {
             throw new Error("Failed to derive homeserver name from user ID!");
         }
