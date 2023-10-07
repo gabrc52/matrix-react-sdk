@@ -320,7 +320,7 @@ const SpotlightDialog: React.FC<IProps> = ({ initialText = "", initialFilter = n
         error: publicRoomsError,
     } = usePublicRoomDirectory();
     const [showRooms, setShowRooms] = useState(true);
-    const [showSpaces, setShowSpaces] = useState(true);
+    const [showSpaces, setShowSpaces] = useState(false);
     const { loading: peopleLoading, users: userDirectorySearchResults, search: searchPeople } = useUserDirectory();
     const { loading: profileLoading, profile, search: searchProfileInfo } = useProfileInfo();
     const searchParams: [IDirectoryOpts] = useMemo(
