@@ -99,13 +99,13 @@ export default class InteractiveAuthDialog<T> extends React.Component<Interactiv
             [SSOAuthEntry.PHASE_PREAUTH]: {
                 title: _t("Use Single Sign On to continue"),
                 body: _t("To continue, use Single Sign On to prove your identity."),
-                continueText: _t("Single Sign On"),
+                continueText: _t("auth|sso"),
                 continueKind: "primary",
             },
             [SSOAuthEntry.PHASE_POSTAUTH]: {
                 title: _t("Confirm to continue"),
                 body: _t("Click the button below to confirm your identity."),
-                continueText: _t("Confirm"),
+                continueText: _t("action|confirm"),
                 continueKind: "primary",
             },
         };
@@ -116,7 +116,7 @@ export default class InteractiveAuthDialog<T> extends React.Component<Interactiv
         };
     }
 
-    private onAuthFinished: InteractiveAuthCallback<T> = (success, result): void => {
+    private onAuthFinished: InteractiveAuthCallback<T> = async (success, result): Promise<void> => {
         if (success) {
             this.props.onFinished(true, result);
         } else {
@@ -171,7 +171,7 @@ export default class InteractiveAuthDialog<T> extends React.Component<Interactiv
                     <div role="alert">{this.state.authError.message || this.state.authError.toString()}</div>
                     <br />
                     <AccessibleButton onClick={this.onDismissClick} className="mx_GeneralButton" autoFocus={true}>
-                        {_t("Dismiss")}
+                        {_t("action|dismiss")}
                     </AccessibleButton>
                 </div>
             );

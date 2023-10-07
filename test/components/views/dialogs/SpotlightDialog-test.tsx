@@ -20,6 +20,7 @@ import {
     ConnectionError,
     IProtocol,
     IPublicRoomsChunkRoom,
+    JoinRule,
     MatrixClient,
     Room,
     RoomMember,
@@ -27,7 +28,8 @@ import {
 import sanitizeHtml from "sanitize-html";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import SpotlightDialog, { Filter } from "../../../../src/components/views/dialogs/spotlight/SpotlightDialog";
+import SpotlightDialog from "../../../../src/components/views/dialogs/spotlight/SpotlightDialog";
+import { Filter } from "../../../../src/components/views/dialogs/spotlight/Filter";
 import { MatrixClientPeg } from "../../../../src/MatrixClientPeg";
 import { LocalRoom, LOCAL_ROOM_ID_PREFIX } from "../../../../src/models/LocalRoom";
 import { DirectoryMember, startDmOnFirstMessage } from "../../../../src/utils/direct-messages";
@@ -37,6 +39,7 @@ import SettingsStore from "../../../../src/settings/SettingsStore";
 import { SettingLevel } from "../../../../src/settings/SettingLevel";
 import defaultDispatcher from "../../../../src/dispatcher/dispatcher";
 import SdkConfig from "../../../../src/SdkConfig";
+import { Action } from "../../../../src/dispatcher/actions";
 
 jest.useFakeTimers();
 
@@ -352,12 +355,12 @@ describe("Spotlight Dialog", () => {
         });
 
         it("should find Rooms", () => {
-            expect(options.length).toBe(3);
+            expect(options).toHaveLength(4);
             expect(options[0]!.innerHTML).toContain(testRoom.name);
         });
 
         it("should not find LocalRooms", () => {
-            expect(options.length).toBe(3);
+            expect(options).toHaveLength(4);
             expect(options[0]!.innerHTML).not.toContain(testLocalRoom.name);
         });
     });
@@ -574,21 +577,74 @@ describe("Spotlight Dialog", () => {
         expect(screen.getByText("Failed to query public rooms")).toBeInTheDocument();
     });
 
-    it("should show error both 'Show rooms' and 'Show spaces' are unchecked", async () => {
-        jest.spyOn(SettingsStore, "getValue").mockImplementation((settingName, roomId, excludeDefault) => {
-            if (settingName === "feature_exploring_public_spaces") {
-                return true;
-            } else {
-                return []; // SpotlightSearch.recentSearches
-            }
+    describe("knock rooms", () => {
+        const knockRoom: IPublicRoomsChunkRoom = {
+            guest_can_join: false,
+            join_rule: JoinRule.Knock,
+            num_joined_members: 0,
+            room_id: "some-room-id",
+            world_readable: false,
+        };
+
+        const viewRoomParams = {
+            action: Action.ViewRoom,
+            metricsTrigger: "WebUnifiedSearch",
+            metricsViaKeyboard: false,
+            room_alias: undefined,
+            room_id: knockRoom.room_id,
+            should_peek: false,
+            via_servers: ["example.tld"],
+        };
+
+        beforeEach(() => (mockedClient = mockClient({ rooms: [knockRoom] })));
+
+        describe("when disabling feature", () => {
+            beforeEach(async () => {
+                jest.spyOn(SettingsStore, "getValue").mockImplementation((setting) =>
+                    setting === "feature_ask_to_join" ? false : [],
+                );
+
+                render(<SpotlightDialog initialFilter={Filter.PublicRooms} onFinished={() => {}} />);
+
+                // search is debounced
+                jest.advanceTimersByTime(200);
+                await flushPromisesWithFakeTimers();
+
+                fireEvent.click(screen.getByRole("button", { name: "View" }));
+            });
+
+            it("should not skip to auto join", async () => {
+                expect(defaultDispatcher.dispatch).toHaveBeenCalledWith({ ...viewRoomParams, auto_join: true });
+            });
+
+            it("should not prompt ask to join", async () => {
+                expect(defaultDispatcher.dispatch).not.toHaveBeenCalledWith({ action: Action.PromptAskToJoin });
+            });
         });
-        render(<SpotlightDialog initialFilter={Filter.PublicRooms} onFinished={() => null} />);
 
-        jest.advanceTimersByTime(200);
-        await flushPromisesWithFakeTimers();
+        describe("when enabling feature", () => {
+            beforeEach(async () => {
+                jest.spyOn(SettingsStore, "getValue").mockImplementation((setting) =>
+                    setting === "feature_ask_to_join" ? true : [],
+                );
+                jest.spyOn(mockedClient, "getRoom").mockReturnValue(null);
 
-        fireEvent.click(screen.getByText("Show rooms"));
+                render(<SpotlightDialog initialFilter={Filter.PublicRooms} onFinished={() => {}} />);
 
-        expect(screen.getByText("You cannot search for rooms that are neither a room nor a space")).toBeInTheDocument();
+                // search is debounced
+                jest.advanceTimersByTime(200);
+                await flushPromisesWithFakeTimers();
+
+                fireEvent.click(screen.getByRole("button", { name: "Ask to join" }));
+            });
+
+            it("should skip to auto join", async () => {
+                expect(defaultDispatcher.dispatch).toHaveBeenCalledWith({ ...viewRoomParams, auto_join: false });
+            });
+
+            it("should prompt ask to join", async () => {
+                expect(defaultDispatcher.dispatch).toHaveBeenCalledWith({ action: Action.PromptAskToJoin });
+            });
+        });
     });
 });

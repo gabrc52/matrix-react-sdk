@@ -164,7 +164,7 @@ const CreateSubspaceDialog: React.FC<IProps> = ({ space, onAddExistingSpaceClick
                             label={_t("Space visibility")}
                             labelInvite={_t("Private space (invite only)")}
                             labelPublic={_t("Public space")}
-                            labelRestricted={_t("Visible to space members")}
+                            labelRestricted={_t("create_room|join_rule_restricted")}
                             width={478}
                             value={joinRule}
                             onChange={setJoinRule}
@@ -188,10 +188,10 @@ const CreateSubspaceDialog: React.FC<IProps> = ({ space, onAddExistingSpaceClick
                     </div>
 
                     <AccessibleButton kind="primary_outline" disabled={busy} onClick={() => onFinished(false)}>
-                        {_t("Cancel")}
+                        {_t("action|cancel")}
                     </AccessibleButton>
                     <AccessibleButton kind="primary" disabled={busy} onClick={onCreateSubspaceClick}>
-                        {busy ? _t("Adding…") : _t("Add")}
+                        {busy ? _t("Adding…") : _t("action|add")}
                     </AccessibleButton>
                 </div>
             </MatrixClientContext.Provider>

@@ -185,7 +185,7 @@ const RoomListHeader: React.FC<IProps> = ({ onVisibilityChange }) => {
         if (shouldShowSpaceInvite(activeSpace)) {
             inviteOption = (
                 <IconizedContextMenuOption
-                    label={_t("Invite")}
+                    label={_t("action|invite")}
                     iconClassName="mx_RoomListHeader_iconInvite"
                     onClick={(e) => {
                         e.preventDefault();
@@ -267,9 +267,7 @@ const RoomListHeader: React.FC<IProps> = ({ onVisibilityChange }) => {
                             closePlusMenu();
                         }}
                         disabled={!canAddSubRooms}
-                        tooltip={
-                            !canAddSubRooms ? _t("You do not have permissions to add rooms to this space") : undefined
-                        }
+                        tooltip={!canAddSubRooms ? _t("spaces|error_no_permission_add_room") : undefined}
                     />
                     {canCreateSpaces && (
                         <IconizedContextMenuOption
@@ -282,11 +280,7 @@ const RoomListHeader: React.FC<IProps> = ({ onVisibilityChange }) => {
                                 closePlusMenu();
                             }}
                             disabled={!canAddSubSpaces}
-                            tooltip={
-                                !canAddSubSpaces
-                                    ? _t("You do not have permissions to add spaces to this space")
-                                    : undefined
-                            }
+                            tooltip={!canAddSubSpaces ? _t("spaces|error_no_permission_add_space") : undefined}
                         >
                             <BetaPill />
                         </IconizedContextMenuOption>
@@ -428,7 +422,7 @@ const RoomListHeader: React.FC<IProps> = ({ onVisibilityChange }) => {
                     onClick={openPlusMenu}
                     isExpanded={plusMenuDisplayed}
                     className="mx_RoomListHeader_plusButton"
-                    title={_t("Add")}
+                    title={_t("action|add")}
                 />
             )}
 

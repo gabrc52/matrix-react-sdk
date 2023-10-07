@@ -354,19 +354,17 @@ export default class ForgotPassword extends React.Component<Props, State> {
                 <div>
                     <p>
                         {_t(
-                            "Signing out your devices will delete the message encryption keys stored on them, " +
-                                "making encrypted chat history unreadable.",
+                            "Signing out your devices will delete the message encryption keys stored on them, making encrypted chat history unreadable.",
                         )}
                     </p>
                     <p>
                         {_t(
-                            "If you want to retain access to your chat history in encrypted rooms, set up Key Backup " +
-                                "or export your message keys from one of your other devices before proceeding.",
+                            "If you want to retain access to your chat history in encrypted rooms, set up Key Backup or export your message keys from one of your other devices before proceeding.",
                         )}
                     </p>
                 </div>
             ),
-            button: _t("Continue"),
+            button: _t("action|continue"),
         });
         const [confirmed] = await finished;
         return !!confirmed;
@@ -386,12 +384,12 @@ export default class ForgotPassword extends React.Component<Props, State> {
 
     public renderSetPassword(): JSX.Element {
         const submitButtonChild =
-            this.state.phase === Phase.ResettingPassword ? <Spinner w={16} h={16} /> : _t("Reset password");
+            this.state.phase === Phase.ResettingPassword ? <Spinner w={16} h={16} /> : _t("auth|reset_password_action");
 
         return (
             <>
                 <LockIcon className="mx_AuthBody_lockIcon" />
-                <h1>{_t("Reset your password")}</h1>
+                <h1>{_t("auth|reset_password_title")}</h1>
                 <form onSubmit={this.onSubmitForm}>
                     <fieldset disabled={this.state.phase === Phase.ResettingPassword}>
                         <div className="mx_AuthBody_fieldRow">
@@ -443,9 +441,7 @@ export default class ForgotPassword extends React.Component<Props, State> {
                 {this.state.logoutDevices ? (
                     <p>
                         {_t(
-                            "You have been logged out of all devices and will no longer receive " +
-                                "push notifications. To re-enable notifications, sign in again on each " +
-                                "device.",
+                            "You have been logged out of all devices and will no longer receive push notifications. To re-enable notifications, sign in again on each device.",
                         )}
                     </p>
                 ) : null}
