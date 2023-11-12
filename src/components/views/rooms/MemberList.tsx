@@ -33,6 +33,8 @@ import {
     ClientEvent,
 } from "matrix-js-sdk/src/matrix";
 import { throttle } from "lodash";
+import { Button, Tooltip } from "@vector-im/compound-web";
+import { Icon as UserAddIcon } from "@vector-im/compound-design-tokens/icons/user-add-solid.svg";
 
 import { _t } from "../../../languageHandler";
 import dis from "../../../dispatcher/dispatcher";
@@ -44,7 +46,7 @@ import RoomName from "../elements/RoomName";
 import TruncatedList from "../elements/TruncatedList";
 import Spinner from "../elements/Spinner";
 import SearchBox from "../../structures/SearchBox";
-import AccessibleButton, { ButtonEvent } from "../elements/AccessibleButton";
+import { ButtonEvent } from "../elements/AccessibleButton";
 import EntityTile from "./EntityTile";
 import MemberTile from "./MemberTile";
 import BaseAvatar from "../avatars/BaseAvatar";
@@ -52,7 +54,6 @@ import { shouldShowComponent } from "../../../customisations/helpers/UIComponent
 import { UIComponent } from "../../../settings/UIFeature";
 import PosthogTrackers from "../../../PosthogTrackers";
 import { SDKContext } from "../../../contexts/SDKContext";
-import AccessibleTooltipButton from "../elements/AccessibleTooltipButton";
 
 const INITIAL_LOAD_NUM_MEMBERS = 30;
 const INITIAL_LOAD_NUM_INVITED = 5;
@@ -236,7 +237,7 @@ export default class MemberList extends React.Component<IProps, IState> {
 
     private createOverflowTile = (overflowCount: number, totalCount: number, onClick: () => void): JSX.Element => {
         // For now we'll pretend this is any entity. It should probably be a separate tile.
-        const text = _t("and %(count)s others...", { count: overflowCount });
+        const text = _t("common|and_n_others", { count: overflowCount });
         return (
             <EntityTile
                 className="mx_EntityTile_ellipsis"
@@ -354,27 +355,31 @@ export default class MemberList extends React.Component<IProps, IState> {
         let inviteButton: JSX.Element | undefined;
 
         if (room?.getMyMembership() === "join" && shouldShowComponent(UIComponent.InviteUsers)) {
-            let inviteButtonText = _t("Invite to this room");
+            let inviteButtonText = _t("room|invite_this_room");
             if (room.isSpaceRoom()) {
-                inviteButtonText = _t("Invite to this space");
+                inviteButtonText = _t("space|invite_this_space");
             }
 
             if (this.state.canInvite) {
                 inviteButton = (
-                    <AccessibleButton className="mx_MemberList_invite" onClick={this.onInviteButtonClick}>
-                        <span>{inviteButtonText}</span>
-                    </AccessibleButton>
+                    <Button
+                        size="sm"
+                        kind="secondary"
+                        className="mx_MemberList_invite"
+                        onClick={this.onInviteButtonClick}
+                    >
+                        <UserAddIcon width="1em" height="1em" />
+                        {inviteButtonText}
+                    </Button>
                 );
             } else {
                 inviteButton = (
-                    <AccessibleTooltipButton
-                        className="mx_MemberList_invite"
-                        onClick={null}
-                        disabled
-                        tooltip={_t("You do not have permission to invite users")}
-                    >
-                        <span>{inviteButtonText}</span>
-                    </AccessibleTooltipButton>
+                    <Tooltip label={_t("member_list|invite_button_no_perms_tooltip")}>
+                        <Button size="sm" kind="secondary" className="mx_MemberList_invite" onClick={() => {}}>
+                            <UserAddIcon width="1em" height="1em" />
+                            {inviteButtonText}
+                        </Button>
+                    </Tooltip>
                 );
             }
         }
@@ -382,7 +387,7 @@ export default class MemberList extends React.Component<IProps, IState> {
         let invitedHeader;
         let invitedSection;
         if (this.getChildCountInvited() > 0) {
-            invitedHeader = <h2>{_t("Invited")}</h2>;
+            invitedHeader = <h2>{_t("member_list|invited_list_heading")}</h2>;
             invitedSection = (
                 <TruncatedList
                     className="mx_MemberList_section mx_MemberList_invited"
@@ -397,7 +402,7 @@ export default class MemberList extends React.Component<IProps, IState> {
         const footer = (
             <SearchBox
                 className="mx_MemberList_query mx_textinput_icon mx_textinput_search"
-                placeholder={_t("Filter room members")}
+                placeholder={_t("member_list|filter_placeholder")}
                 onSearch={this.onSearchQueryChanged}
                 initialValue={this.props.searchQuery}
             />
@@ -416,15 +421,11 @@ export default class MemberList extends React.Component<IProps, IState> {
         return (
             <BaseCard
                 className="mx_MemberList"
-                header={
-                    <React.Fragment>
-                        {scopeHeader}
-                        {inviteButton}
-                    </React.Fragment>
-                }
+                header={<React.Fragment>{scopeHeader}</React.Fragment>}
                 footer={footer}
                 onClose={this.props.onClose}
             >
+                {inviteButton}
                 <div className="mx_MemberList_wrapper">
                     <TruncatedList
                         className="mx_MemberList_section mx_MemberList_joined"

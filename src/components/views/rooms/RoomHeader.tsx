@@ -47,6 +47,7 @@ import { useRoomState } from "../../../hooks/useRoomState";
 import RoomAvatar from "../avatars/RoomAvatar";
 import { formatCount } from "../../../utils/FormattingUtils";
 import RightPanelStore from "../../../stores/right-panel/RightPanelStore";
+import { Linkify, topicToHtml } from "../../../HtmlUtils";
 
 /**
  * A helper to transform a notification color to the what the Compound Icon Button
@@ -100,6 +101,11 @@ export default function RoomHeader({ room }: { room: Room }): JSX.Element {
 
     const notificationsEnabled = useFeatureEnabled("feature_notifications");
 
+    const roomTopicBody = useMemo(
+        () => topicToHtml(roomTopic?.text, roomTopic?.html),
+        [roomTopic?.html, roomTopic?.text],
+    );
+
     return (
         <Flex
             as="header"
@@ -117,49 +123,48 @@ export default function RoomHeader({ room }: { room: Room }): JSX.Element {
                     size="lg"
                     weight="semibold"
                     dir="auto"
-                    title={roomName}
                     role="heading"
                     aria-level={1}
                     className="mx_RoomHeader_heading"
                 >
-                    {roomName}
+                    <span className="mx_RoomHeader_truncated mx_lineClamp">{roomName}</span>
 
                     {!isDirectMessage && roomState.getJoinRule() === JoinRule.Public && (
-                        <Tooltip label={_t("Public room")}>
+                        <Tooltip label={_t("common|public_room")} side="right">
                             <PublicIcon
                                 width="16px"
                                 height="16px"
-                                className="text-secondary"
-                                aria-label={_t("Public room")}
+                                className="mx_RoomHeader_icon text-secondary"
+                                aria-label={_t("common|public_room")}
                             />
                         </Tooltip>
                     )}
 
                     {isDirectMessage && e2eStatus === E2EStatus.Verified && (
-                        <Tooltip label={_t("common|verified")}>
+                        <Tooltip label={_t("common|verified")} side="right">
                             <VerifiedIcon
                                 width="16px"
                                 height="16px"
-                                className="mx_Verified"
+                                className="mx_RoomHeader_icon mx_Verified"
                                 aria-label={_t("common|verified")}
                             />
                         </Tooltip>
                     )}
 
                     {isDirectMessage && e2eStatus === E2EStatus.Warning && (
-                        <Tooltip label={_t("Untrusted")}>
+                        <Tooltip label={_t("room|header_untrusted_label")} side="right">
                             <ErrorIcon
                                 width="16px"
                                 height="16px"
-                                className="mx_Untrusted"
-                                aria-label={_t("Untrusted")}
+                                className="mx_RoomHeader_icon mx_Untrusted"
+                                aria-label={_t("room|header_untrusted_label")}
                             />
                         </Tooltip>
                     )}
                 </BodyText>
                 {roomTopic && (
-                    <BodyText as="div" size="sm" className="mx_RoomHeader_topic">
-                        {roomTopic.text}
+                    <BodyText as="div" size="sm" className="mx_RoomHeader_topic mx_RoomHeader_truncated mx_lineClamp">
+                        <Linkify>{roomTopicBody}</Linkify>
                     </BodyText>
                 )}
             </Box>
@@ -197,14 +202,14 @@ export default function RoomHeader({ room }: { room: Room }): JSX.Element {
                     </IconButton>
                 </Tooltip>
                 {notificationsEnabled && (
-                    <Tooltip label={_t("Notifications")}>
+                    <Tooltip label={_t("notifications|enable_prompt_toast_title")}>
                         <IconButton
                             indicator={notificationColorToIndicator(globalNotificationState.color)}
                             onClick={(evt) => {
                                 evt.stopPropagation();
                                 RightPanelStore.instance.showOrHidePanel(RightPanelPhases.NotificationPanel);
                             }}
-                            aria-label={_t("Notifications")}
+                            aria-label={_t("notifications|enable_prompt_toast_title")}
                         >
                             <NotificationsIcon />
                         </IconButton>
@@ -216,7 +221,7 @@ export default function RoomHeader({ room }: { room: Room }): JSX.Element {
                     as="div"
                     size="sm"
                     weight="medium"
-                    aria-label={_t("%(count)s members", { count: memberCount })}
+                    aria-label={_t("common|n_members", { count: memberCount })}
                     onClick={(e: React.MouseEvent) => {
                         RightPanelStore.instance.showOrHidePanel(RightPanelPhases.RoomMemberList);
                         e.stopPropagation();

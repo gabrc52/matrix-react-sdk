@@ -17,6 +17,8 @@ limitations under the License.
 import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import classNames from "classnames";
 import { Room } from "matrix-js-sdk/src/matrix";
+import { Tooltip } from "@vector-im/compound-web";
+import { Icon as SearchIcon } from "@vector-im/compound-design-tokens/icons/search.svg";
 
 import MatrixClientContext from "../../../contexts/MatrixClientContext";
 import { useIsEncrypted } from "../../../hooks/useIsEncrypted";
@@ -53,6 +55,7 @@ import RightPanelStore from "../../../stores/right-panel/RightPanelStore";
 import PosthogTrackers from "../../../PosthogTrackers";
 import { shouldShowComponent } from "../../../customisations/helpers/UIComponents";
 import { PollHistoryDialog } from "../dialogs/PollHistoryDialog";
+import { Flex } from "../../utils/Flex";
 
 interface IProps {
     room: Room;
@@ -149,7 +152,7 @@ const AppRow: React.FC<IAppRowProps> = ({ app, room }) => {
 
     let pinTitle: string;
     if (cannotPin) {
-        pinTitle = _t("You can only pin up to %(count)s widgets", { count: MAX_PINNED });
+        pinTitle = _t("right_panel|pinned_messages|limits", { count: MAX_PINNED });
     } else {
         pinTitle = isPinned ? _t("action|unpin") : _t("action|pin");
     }
@@ -167,9 +170,9 @@ const AppRow: React.FC<IAppRowProps> = ({ app, room }) => {
 
     let openTitle = "";
     if (isPinned) {
-        openTitle = _t("Unpin this widget to view it in this panel");
+        openTitle = _t("widget|unpin_to_view_right_panel");
     } else if (isMaximised) {
-        openTitle = _t("Close this widget to view it in this panel");
+        openTitle = _t("widget|close_to_view_right_panel");
     }
 
     const classes = classNames("mx_BaseCard_Button mx_RoomSummaryCard_Button", {
@@ -237,19 +240,19 @@ const AppsSection: React.FC<IAppsSectionProps> = ({ room }) => {
     if (realApps.length > 0 && WidgetLayoutStore.instance.canCopyLayoutToRoom(room)) {
         copyLayoutBtn = (
             <AccessibleButton kind="link" onClick={() => WidgetLayoutStore.instance.copyLayoutToRoom(room)}>
-                {_t("Set my room layout for everyone")}
+                {_t("widget|set_room_layout")}
             </AccessibleButton>
         );
     }
 
     return (
-        <Group className="mx_RoomSummaryCard_appsGroup" title={_t("Widgets")}>
+        <Group className="mx_RoomSummaryCard_appsGroup" title={_t("right_panel|widgets_section")}>
             {realApps.map((app) => (
                 <AppRow key={app.id} app={app} room={room} />
             ))}
             {copyLayoutBtn}
             <AccessibleButton kind="link" onClick={onManageIntegrations}>
-                {realApps.length > 0 ? _t("Edit widgets, bridges & bots") : _t("Add widgets, bridges & bots")}
+                {realApps.length > 0 ? _t("right_panel|edit_integrations") : _t("right_panel|add_integrations")}
             </AccessibleButton>
         </Group>
     );
@@ -306,11 +309,11 @@ const RoomSummaryCard: React.FC<IProps> = ({ room, permalinkCreator, onClose, on
 
     const alias = room.getCanonicalAlias() || room.getAltAliases()[0] || "";
     const header = (
-        <React.Fragment>
+        <header className="mx_RoomSummaryCard_container">
             <div className="mx_RoomSummaryCard_avatar" role="presentation">
                 <RoomAvatar room={room} size="54px" viewAvatarOnClick />
                 <TextWithTooltip
-                    tooltip={isRoomEncrypted ? _t("common|encrypted") : _t("Not encrypted")}
+                    tooltip={isRoomEncrypted ? _t("common|encrypted") : _t("common|unencrypted")}
                     class={classNames("mx_RoomSummaryCard_e2ee", {
                         mx_RoomSummaryCard_e2ee_normal: isRoomEncrypted,
                         mx_RoomSummaryCard_e2ee_warning: isRoomEncrypted && e2eStatus === E2EStatus.Warning,
@@ -329,7 +332,7 @@ const RoomSummaryCard: React.FC<IProps> = ({ room, permalinkCreator, onClose, on
             <div className="mx_RoomSummaryCard_alias" title={alias}>
                 {alias}
             </div>
-        </React.Fragment>
+        </header>
     );
 
     const memberCount = useRoomMemberCount(room);
@@ -337,41 +340,59 @@ const RoomSummaryCard: React.FC<IProps> = ({ room, permalinkCreator, onClose, on
     const pinCount = usePinnedEvents(pinningEnabled ? room : undefined)?.length;
 
     return (
-        <BaseCard header={header} className="mx_RoomSummaryCard" onClose={onClose}>
+        <BaseCard header={null} className="mx_RoomSummaryCard" onClose={onClose}>
+            <Flex
+                as="header"
+                className="mx_RoomSummaryCard_header"
+                gap="var(--cpd-space-3x)"
+                align="center"
+                justify="space-between"
+            >
+                <Tooltip label={_t("action|search")} side="right">
+                    <button
+                        className="mx_RoomSummaryCard_searchBtn"
+                        data-testid="summary-search"
+                        onClick={() => {
+                            onSearchClick?.();
+                        }}
+                        aria-label={_t("action|search")}
+                    >
+                        <SearchIcon width="100%" height="100%" />
+                    </button>
+                </Tooltip>
+                <AccessibleButton
+                    data-testid="base-card-close-button"
+                    className="mx_BaseCard_close"
+                    onClick={onClose}
+                    title={_t("action|close")}
+                />
+            </Flex>
+
+            {header}
             <Group title={_t("common|about")} className="mx_RoomSummaryCard_aboutGroup">
                 <Button className="mx_RoomSummaryCard_icon_people" onClick={onRoomMembersClick}>
                     {_t("common|people")}
                     <span className="mx_BaseCard_Button_sublabel">{memberCount}</span>
                 </Button>
-                {SettingsStore.getValue("feature_new_room_decoration_ui") && (
-                    <Button
-                        className="mx_RoomSummaryCard_icon_search"
-                        onClick={() => {
-                            onSearchClick?.();
-                        }}
-                    >
-                        {_t("Search")}
-                    </Button>
-                )}
                 {!isVideoRoom && (
                     <Button className="mx_RoomSummaryCard_icon_files" onClick={onRoomFilesClick}>
-                        {_t("Files")}
+                        {_t("right_panel|files_button")}
                     </Button>
                 )}
                 {!isVideoRoom && (
                     <Button className="mx_RoomSummaryCard_icon_poll" onClick={onRoomPollHistoryClick}>
-                        {_t("Poll history")}
+                        {_t("right_panel|polls_button")}
                     </Button>
                 )}
                 {pinningEnabled && !isVideoRoom && (
                     <Button className="mx_RoomSummaryCard_icon_pins" onClick={onRoomPinsClick}>
-                        {_t("Pinned")}
+                        {_t("right_panel|pinned_messages_button")}
                         {pinCount > 0 && <span className="mx_BaseCard_Button_sublabel">{pinCount}</span>}
                     </Button>
                 )}
                 {!isVideoRoom && (
                     <Button className="mx_RoomSummaryCard_icon_export" onClick={onRoomExportClick}>
-                        {_t("Export chat")}
+                        {_t("right_panel|export_chat_button")}
                     </Button>
                 )}
                 <Button
@@ -379,10 +400,10 @@ const RoomSummaryCard: React.FC<IProps> = ({ room, permalinkCreator, onClose, on
                     className="mx_RoomSummaryCard_icon_share"
                     onClick={onShareRoomClick}
                 >
-                    {_t("Share room")}
+                    {_t("right_panel|share_button")}
                 </Button>
                 <Button className="mx_RoomSummaryCard_icon_settings" onClick={onRoomSettingsClick}>
-                    {_t("Room settings")}
+                    {_t("right_panel|settings_button")}
                 </Button>
             </Group>
 

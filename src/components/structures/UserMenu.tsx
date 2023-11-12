@@ -349,17 +349,17 @@ export default class UserMenu extends React.Component<IProps, IState> {
                 {homeButton}
                 <IconizedContextMenuOption
                     iconClassName="mx_UserMenu_iconBell"
-                    label={_t("Notifications")}
+                    label={_t("notifications|enable_prompt_toast_title")}
                     onClick={(e) => this.onSettingsOpen(e, UserTab.Notifications)}
                 />
                 <IconizedContextMenuOption
                     iconClassName="mx_UserMenu_iconLock"
-                    label={_t("Security & Privacy")}
+                    label={_t("room_settings|security|title")}
                     onClick={(e) => this.onSettingsOpen(e, UserTab.Security)}
                 />
                 <IconizedContextMenuOption
                     iconClassName="mx_UserMenu_iconSettings"
-                    label={_t("All settings")}
+                    label={_t("user_menu|settings")}
                     onClick={(e) => this.onSettingsOpen(e)}
                 />
                 {feedbackButton}
@@ -410,11 +410,16 @@ export default class UserMenu extends React.Component<IProps, IState> {
                     <RovingAccessibleTooltipButton
                         className="mx_UserMenu_contextMenu_themeButton"
                         onClick={this.onSwitchThemeClick}
-                        title={this.state.isDarkTheme ? _t("Switch to light mode") : _t("Switch to dark mode")}
+                        title={
+                            this.state.isDarkTheme
+                                ? _t("user_menu|switch_theme_light")
+                                : _t("user_menu|switch_theme_dark")
+                        }
                     >
                         <img
                             src={require("../../../res/img/element-icons/roomlist/dark-light-mode.svg").default}
-                            alt={_t("Switch theme")}
+                            role="presentation"
+                            alt=""
                             width={16}
                         />
                     </RovingAccessibleTooltipButton>

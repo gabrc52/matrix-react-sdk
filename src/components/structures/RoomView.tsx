@@ -292,7 +292,7 @@ function LocalRoomView(props: LocalRoomViewProps): ReactElement {
 
         statusBar = (
             <RoomStatusBarUnsentMessages
-                title={_t("Some of your messages have not been sent")}
+                title={_t("room|status_bar|some_messages_not_sent")}
                 notificationState={StaticNotificationState.RED_EXCLAMATION}
                 buttons={buttons}
             />
@@ -359,7 +359,7 @@ interface ILocalRoomCreateLoaderProps {
  * @return {ReactElement}
  */
 function LocalRoomCreateLoader(props: ILocalRoomCreateLoaderProps): ReactElement {
-    const text = _t("We're creating a room with %(names)s", { names: props.names });
+    const text = _t("room|creating_room_text", { names: props.names });
     return (
         <div className="mx_RoomView mx_RoomView--local">
             <ErrorBoundary>
@@ -1081,9 +1081,9 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
     private onPageUnload = (event: BeforeUnloadEvent): string | undefined => {
         if (ContentMessages.sharedInstance().getCurrentUploads().length > 0) {
-            return (event.returnValue = _t("You seem to be uploading files, are you sure you want to quit?"));
+            return (event.returnValue = _t("quit_warning|file_upload_in_progress"));
         } else if (this.getCallForRoom() && this.state.callState !== "ended") {
-            return (event.returnValue = _t("You seem to be in a call, are you sure you want to quit?"));
+            return (event.returnValue = _t("quit_warning|call_in_progress"));
         }
     };
 
@@ -1760,7 +1760,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
                 const msg = error.message ? error.message : JSON.stringify(error);
                 Modal.createDialog(ErrorDialog, {
-                    title: _t("Failed to reject invite"),
+                    title: _t("room|failed_reject_invite"),
                     description: msg,
                 });
 
@@ -1793,7 +1793,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
             const msg = error instanceof Error ? error.message : JSON.stringify(error);
             Modal.createDialog(ErrorDialog, {
-                title: _t("Failed to reject invite"),
+                title: _t("room|failed_reject_invite"),
                 description: msg,
             });
 
@@ -2097,13 +2097,15 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             }
         }
 
+        const roomHeaderType = SettingsStore.getValue("feature_new_room_decoration_ui") ? "new" : "legacy";
+
         if (!this.state.room) {
             const loading = !this.state.matrixClientIsReady || this.state.roomLoading || this.state.peekLoading;
             if (loading) {
                 // Assume preview loading if we don't have a ready client or a room ID (still resolving the alias)
                 const previewLoading = !this.state.matrixClientIsReady || !this.state.roomId || this.state.peekLoading;
                 return (
-                    <div className="mx_RoomView">
+                    <div className="mx_RoomView" data-room-header={roomHeaderType}>
                         <ErrorBoundary>
                             <RoomPreviewBar
                                 canPreview={false}
@@ -2128,7 +2130,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                 // We've got to this room by following a link, possibly a third party invite.
                 const roomAlias = this.state.roomAlias;
                 return (
-                    <div className="mx_RoomView">
+                    <div className="mx_RoomView" data-room-header={roomHeaderType}>
                         <ErrorBoundary>
                             <RoomPreviewBar
                                 onJoinClick={this.onJoinButtonClicked}
@@ -2190,7 +2192,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                 const myUserId = this.context.client.getSafeUserId();
                 const myMember = this.state.room.getMember(myUserId);
                 const inviteEvent = myMember ? myMember.events.member : null;
-                let inviterName = _t("Unknown");
+                let inviterName = _t("room|inviter_unknown");
                 if (inviteEvent) {
                     inviterName = inviteEvent.sender?.name ?? inviteEvent.getSender()!;
                 }
@@ -2201,7 +2203,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
                 // We have a regular invite for this room.
                 return (
-                    <div className="mx_RoomView">
+                    <div className="mx_RoomView" data-room-header={roomHeaderType}>
                         <ErrorBoundary>
                             <RoomPreviewBar
                                 onJoinClick={this.onJoinButtonClicked}
@@ -2222,7 +2224,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
         if (this.state.canAskToJoin && ["knock", "leave"].includes(myMembership)) {
             return (
-                <div className="mx_RoomView">
+                <div className="mx_RoomView" data-room-header={roomHeaderType}>
                     <ErrorBoundary>
                         <RoomPreviewBar
                             room={this.state.room}
@@ -2326,7 +2328,11 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                 />
             );
             if (!this.state.canPeek && !this.state.room?.isSpaceRoom()) {
-                return <div className="mx_RoomView">{previewBar}</div>;
+                return (
+                    <div className="mx_RoomView" data-room-header={roomHeaderType}>
+                        {previewBar}
+                    </div>
+                );
             }
         } else if (hiddenHighlightCount > 0) {
             aux = (
@@ -2335,7 +2341,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                     className="mx_RoomView_auxPanel_hiddenHighlights"
                     onClick={this.onHiddenHighlightsClick}
                 >
-                    {_t("You have %(count)s unread notifications in a prior version of this room.", {
+                    {_t("room|unread_notifications_predecessor", {
                         count: hiddenHighlightCount,
                     })}
                 </AccessibleButton>
@@ -2571,32 +2577,16 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
 
         return (
             <RoomContext.Provider value={this.state}>
-                <main className={mainClasses} ref={this.roomView} onKeyDown={this.onReactKeyDown}>
+                <main
+                    className={mainClasses}
+                    ref={this.roomView}
+                    onKeyDown={this.onReactKeyDown}
+                    data-room-header={roomHeaderType}
+                >
                     {showChatEffects && this.roomView.current && (
                         <EffectsOverlay roomWidth={this.roomView.current.offsetWidth} />
                     )}
                     <ErrorBoundary>
-                        {SettingsStore.getValue("feature_new_room_decoration_ui") ? (
-                            <RoomHeader room={this.state.room} />
-                        ) : (
-                            <LegacyRoomHeader
-                                room={this.state.room}
-                                searchInfo={this.state.search}
-                                oobData={this.props.oobData}
-                                inRoom={myMembership === "join"}
-                                onSearchClick={onSearchClick}
-                                onInviteClick={onInviteClick}
-                                onForgetClick={showForgetButton ? onForgetClick : null}
-                                e2eStatus={this.state.e2eStatus}
-                                onAppsClick={this.state.hasPinnedWidgets ? onAppsClick : null}
-                                appsShown={this.state.showApps}
-                                excludedRightPanelPhaseButtons={excludedRightPanelPhaseButtons}
-                                showButtons={!this.viewsLocalRoom}
-                                enableRoomOptionsMenu={!this.viewsLocalRoom}
-                                viewingCall={viewingCall}
-                                activeCall={this.state.activeCall}
-                            />
-                        )}
                         <MainSplit
                             panel={rightPanel}
                             resizeNotifier={this.props.resizeNotifier}
@@ -2610,6 +2600,27 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                                 ref={this.roomViewBody}
                                 data-layout={this.state.layout}
                             >
+                                {SettingsStore.getValue("feature_new_room_decoration_ui") ? (
+                                    <RoomHeader room={this.state.room} />
+                                ) : (
+                                    <LegacyRoomHeader
+                                        room={this.state.room}
+                                        searchInfo={this.state.search}
+                                        oobData={this.props.oobData}
+                                        inRoom={myMembership === "join"}
+                                        onSearchClick={onSearchClick}
+                                        onInviteClick={onInviteClick}
+                                        onForgetClick={showForgetButton ? onForgetClick : null}
+                                        e2eStatus={this.state.e2eStatus}
+                                        onAppsClick={this.state.hasPinnedWidgets ? onAppsClick : null}
+                                        appsShown={this.state.showApps}
+                                        excludedRightPanelPhaseButtons={excludedRightPanelPhaseButtons}
+                                        showButtons={!this.viewsLocalRoom}
+                                        enableRoomOptionsMenu={!this.viewsLocalRoom}
+                                        viewingCall={viewingCall}
+                                        activeCall={this.state.activeCall}
+                                    />
+                                )}
                                 {mainSplitBody}
                             </div>
                         </MainSplit>

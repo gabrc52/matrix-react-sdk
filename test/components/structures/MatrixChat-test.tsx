@@ -34,6 +34,7 @@ import { Action } from "../../../src/dispatcher/actions";
 import { UserTab } from "../../../src/components/views/dialogs/UserTab";
 import {
     clearAllModals,
+    createStubMatrixRTC,
     filterConsole,
     flushPromises,
     getMockClientWithEventEmitter,
@@ -41,8 +42,10 @@ import {
     MockClientWithEventEmitter,
     mockPlatformPeg,
     resetJsDomAfterEach,
+    unmockClientPeg,
 } from "../../test-utils";
 import * as leaveRoomUtils from "../../../src/utils/leave-behaviour";
+import { OidcClientError } from "../../../src/utils/oidc/error";
 import * as voiceBroadcastUtils from "../../../src/voice-broadcast/utils/cleanUpBroadcasts";
 import LegacyCallHandler from "../../../src/LegacyCallHandler";
 import { CallStore } from "../../../src/stores/CallStore";
@@ -51,6 +54,7 @@ import { PosthogAnalytics } from "../../../src/PosthogAnalytics";
 import PlatformPeg from "../../../src/PlatformPeg";
 import EventIndexPeg from "../../../src/indexing/EventIndexPeg";
 import * as Lifecycle from "../../../src/Lifecycle";
+import { SSO_HOMESERVER_URL_KEY, SSO_ID_SERVER_URL_KEY } from "../../../src/BasePlatform";
 
 jest.mock("matrix-js-sdk/src/oidc/authorize", () => ({
     completeAuthorizationCodeGrant: jest.fn(),
@@ -69,6 +73,7 @@ describe("<MatrixChat />", () => {
         setCanResetTimelineCallback: jest.fn(),
         isInitialSyncComplete: jest.fn(),
         getSyncState: jest.fn(),
+        getSsoLoginUrl: jest.fn(),
         getSyncStateData: jest.fn().mockReturnValue(null),
         getThirdpartyProtocols: jest.fn().mockResolvedValue({}),
         getClientWellKnown: jest.fn().mockReturnValue({}),
@@ -105,6 +110,7 @@ describe("<MatrixChat />", () => {
         secretStorage: {
             isStored: jest.fn().mockReturnValue(null),
         },
+        matrixRTC: createStubMatrixRTC(),
         getDehydratedDevice: jest.fn(),
         whoami: jest.fn(),
         isRoomEncrypted: jest.fn(),
@@ -912,24 +918,36 @@ describe("<MatrixChat />", () => {
 
         let loginClient!: ReturnType<typeof getMockClientWithEventEmitter>;
 
-        // for now when OIDC fails for any reason we just bump back to welcome
-        // error handling screens in https://github.com/vector-im/element-web/issues/25665
-        const expectOIDCError = async (): Promise<void> => {
+        const expectOIDCError = async (
+            errorMessage = "Something went wrong during authentication. Go to the sign in page and try again.",
+        ): Promise<void> => {
             await flushPromises();
+            const dialog = await screen.findByRole("dialog");
+
+            expect(within(dialog).getByText(errorMessage)).toBeInTheDocument();
             // just check we're back on welcome page
             expect(document.querySelector(".mx_Welcome")!).toBeInTheDocument();
         };
 
         beforeEach(() => {
-            mocked(completeAuthorizationCodeGrant).mockClear().mockResolvedValue({
-                oidcClientSettings: {
-                    clientId,
-                    issuer,
-                },
-                tokenResponse,
-                homeserverUrl,
-                identityServerUrl,
-            });
+            mocked(completeAuthorizationCodeGrant)
+                .mockClear()
+                .mockResolvedValue({
+                    oidcClientSettings: {
+                        clientId,
+                        issuer,
+                    },
+                    tokenResponse,
+                    homeserverUrl,
+                    identityServerUrl,
+                    idTokenClaims: {
+                        aud: "123",
+                        iss: issuer,
+                        sub: "123",
+                        exp: 123,
+                        iat: 456,
+                    },
+                });
 
             jest.spyOn(logger, "error").mockClear();
         });
@@ -960,7 +978,7 @@ describe("<MatrixChat />", () => {
 
             expect(logger.error).toHaveBeenCalledWith(
                 "Failed to login via OIDC",
-                new Error("Invalid query parameters for OIDC native login. `code` and `state` are required."),
+                new Error(OidcClientError.InvalidQueryParameters),
             );
 
             await expectOIDCError();
@@ -1013,6 +1031,24 @@ describe("<MatrixChat />", () => {
         describe("when login fails", () => {
             beforeEach(() => {
                 mocked(completeAuthorizationCodeGrant).mockRejectedValue(new Error(OidcError.CodeExchangeFailed));
+            });
+
+            it("should log and return to welcome page with correct error when login state is not found", async () => {
+                mocked(completeAuthorizationCodeGrant).mockRejectedValue(
+                    new Error(OidcError.MissingOrInvalidStoredState),
+                );
+                getComponent({ realQueryParams });
+
+                await flushPromises();
+
+                expect(logger.error).toHaveBeenCalledWith(
+                    "Failed to login via OIDC",
+                    new Error(OidcError.MissingOrInvalidStoredState),
+                );
+
+                await expectOIDCError(
+                    "We asked the browser to remember which homeserver you use to let you sign in, but unfortunately your browser has forgotten it. Go to the sign in page and try again.",
+                );
             });
 
             it("should log and return to welcome page", async () => {
@@ -1104,6 +1140,64 @@ describe("<MatrixChat />", () => {
                 // check we get to logged in view
                 await waitForSyncAndLoad(loginClient, true);
             });
+        });
+    });
+
+    describe("automatic SSO selection", () => {
+        let ssoClient: ReturnType<typeof getMockClientWithEventEmitter>;
+        let hrefSetter: jest.Mock<void, [string]>;
+        beforeEach(() => {
+            ssoClient = getMockClientWithEventEmitter({
+                ...getMockClientMethods(),
+                getHomeserverUrl: jest.fn().mockReturnValue("matrix.example.com"),
+                getIdentityServerUrl: jest.fn().mockReturnValue("ident.example.com"),
+                getSsoLoginUrl: jest.fn().mockReturnValue("http://my-sso-url"),
+            });
+            // this is used to create a temporary client to cleanup after logout
+            jest.spyOn(MatrixJs, "createClient").mockClear().mockReturnValue(ssoClient);
+            mockPlatformPeg();
+            // Ensure we don't have a client peg as we aren't logged in.
+            unmockClientPeg();
+
+            hrefSetter = jest.fn();
+            const originalHref = window.location.href.toString();
+            Object.defineProperty(window, "location", {
+                value: {
+                    get href() {
+                        return originalHref;
+                    },
+                    set href(href) {
+                        hrefSetter(href);
+                    },
+                },
+                writable: true,
+            });
+        });
+
+        it("should automatically setup and redirect to SSO login", async () => {
+            getComponent({
+                initialScreenAfterLogin: {
+                    screen: "start_sso",
+                },
+            });
+            await flushPromises();
+            expect(ssoClient.getSsoLoginUrl).toHaveBeenCalledWith("http://localhost/", "sso", undefined, undefined);
+            expect(window.localStorage.getItem(SSO_HOMESERVER_URL_KEY)).toEqual("matrix.example.com");
+            expect(window.localStorage.getItem(SSO_ID_SERVER_URL_KEY)).toEqual("ident.example.com");
+            expect(hrefSetter).toHaveBeenCalledWith("http://my-sso-url");
+        });
+
+        it("should automatically setup and redirect to CAS login", async () => {
+            getComponent({
+                initialScreenAfterLogin: {
+                    screen: "start_cas",
+                },
+            });
+            await flushPromises();
+            expect(ssoClient.getSsoLoginUrl).toHaveBeenCalledWith("http://localhost/", "cas", undefined, undefined);
+            expect(window.localStorage.getItem(SSO_HOMESERVER_URL_KEY)).toEqual("matrix.example.com");
+            expect(window.localStorage.getItem(SSO_ID_SERVER_URL_KEY)).toEqual("ident.example.com");
+            expect(hrefSetter).toHaveBeenCalledWith("http://my-sso-url");
         });
     });
 
