@@ -42,6 +42,7 @@ import { logger } from "matrix-js-sdk/src/logger";
 import { CallState, MatrixCall } from "matrix-js-sdk/src/webrtc/call";
 import { throttle } from "lodash";
 import { CryptoEvent } from "matrix-js-sdk/src/crypto";
+import { ViewRoomOpts } from "@matrix-org/react-sdk-module-api/lib/lifecycles/RoomViewLifecycle";
 
 import shouldHideEvent from "../../shouldHideEvent";
 import { _t } from "../../languageHandler";
@@ -130,6 +131,7 @@ import { isNotUndefined } from "../../Typeguards";
 import { CancelAskToJoinPayload } from "../../dispatcher/payloads/CancelAskToJoinPayload";
 import { SubmitAskToJoinPayload } from "../../dispatcher/payloads/SubmitAskToJoinPayload";
 import RightPanelStore from "../../stores/right-panel/RightPanelStore";
+import { onView3pidInvite } from "../../stores/right-panel/action-handlers";
 
 const DEBUG = false;
 const PREVENT_MULTIPLE_JITSI_WITHIN = 30_000;
@@ -246,6 +248,8 @@ export interface IRoomState {
 
     canAskToJoin: boolean;
     promptAskToJoin: boolean;
+
+    viewRoomOpts: ViewRoomOpts;
 }
 
 interface LocalRoomViewProps {
@@ -458,6 +462,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             msc3946ProcessDynamicPredecessor: SettingsStore.getValue("feature_dynamic_room_predecessors"),
             canAskToJoin: this.askToJoinEnabled,
             promptAskToJoin: false,
+            viewRoomOpts: { buttons: [] },
         };
 
         this.dispatcherRef = dis.register(this.onAction);
@@ -663,6 +668,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                 : false,
             activeCall: roomId ? CallStore.instance.getActiveCall(roomId) : null,
             promptAskToJoin: this.context.roomViewStore.promptAskToJoin(),
+            viewRoomOpts: this.context.roomViewStore.getViewRoomOpts(),
         };
 
         if (
@@ -1267,14 +1273,8 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                     RightPanelStore.instance.showOrHidePanel(RightPanelPhases.RoomMemberList);
                 }
                 break;
-            case "view_3pid_invite":
-                if (payload.event) {
-                    RightPanelStore.instance.showOrHidePanel(RightPanelPhases.Room3pidMemberInfo, {
-                        memberInfoEvent: payload.event,
-                    });
-                } else {
-                    RightPanelStore.instance.showOrHidePanel(RightPanelPhases.RoomMemberList);
-                }
+            case Action.View3pidInvite:
+                onView3pidInvite(payload, RightPanelStore.instance);
                 break;
         }
     };
@@ -1407,6 +1407,8 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
             tombstone: this.getRoomTombstone(room),
             liveTimeline: room.getLiveTimeline(),
         });
+
+        dis.dispatch<ActionPayload>({ action: Action.RoomLoaded });
     };
 
     private onRoomTimelineReset = (room?: Room): void => {
@@ -2227,8 +2229,10 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                 <div className="mx_RoomView" data-room-header={roomHeaderType}>
                     <ErrorBoundary>
                         <RoomPreviewBar
+                            onJoinClick={this.onJoinButtonClicked}
                             room={this.state.room}
-                            promptAskToJoin={myMembership === "leave" || this.state.promptAskToJoin}
+                            canAskToJoinAndMembershipIsLeave={myMembership === "leave"}
+                            promptAskToJoin={this.state.promptAskToJoin}
                             knocked={myMembership === "knock"}
                             onSubmitAskToJoin={this.onSubmitAskToJoin}
                             onCancelAskToJoin={this.onCancelAskToJoin}
@@ -2601,7 +2605,10 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                                 data-layout={this.state.layout}
                             >
                                 {SettingsStore.getValue("feature_new_room_decoration_ui") ? (
-                                    <RoomHeader room={this.state.room} />
+                                    <RoomHeader
+                                        room={this.state.room}
+                                        additionalButtons={this.state.viewRoomOpts.buttons}
+                                    />
                                 ) : (
                                     <LegacyRoomHeader
                                         room={this.state.room}
@@ -2619,6 +2626,7 @@ export class RoomView extends React.Component<IRoomProps, IRoomState> {
                                         enableRoomOptionsMenu={!this.viewsLocalRoom}
                                         viewingCall={viewingCall}
                                         activeCall={this.state.activeCall}
+                                        additionalButtons={this.state.viewRoomOpts.buttons}
                                     />
                                 )}
                                 {mainSplitBody}

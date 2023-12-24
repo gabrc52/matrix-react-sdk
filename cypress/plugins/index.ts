@@ -16,7 +16,6 @@ limitations under the License.
 
 /// <reference types="cypress" />
 import installLogsPrinter from "cypress-terminal-report/src/installLogsPrinter";
-import cloudPlugin from "cypress-cloud/plugin";
 import { initPlugins } from "cypress-plugin-init";
 
 import PluginEvents = Cypress.PluginEvents;
@@ -27,28 +26,12 @@ import { slidingSyncProxyDocker } from "./sliding-sync";
 import { webserver } from "./webserver";
 import { docker } from "./docker";
 import { log } from "./log";
-import { oAuthServer } from "./oauth_server";
-import { mailhogDocker } from "./mailhog";
 
 /**
  * @type {Cypress.PluginConfig}
  */
 export default function (on: PluginEvents, config: PluginConfigOptions) {
-    initPlugins(
-        on,
-        [
-            cloudPlugin,
-            docker,
-            synapseDocker,
-            dendriteDocker,
-            slidingSyncProxyDocker,
-            webserver,
-            oAuthServer,
-            log,
-            mailhogDocker,
-        ],
-        config,
-    );
+    initPlugins(on, [docker, synapseDocker, dendriteDocker, slidingSyncProxyDocker, webserver, log], config);
     installLogsPrinter(on, {
         printLogsToConsole: "never",
 

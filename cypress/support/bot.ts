@@ -206,10 +206,6 @@ function setupBotClient(
             await cli.startClient();
 
             if (opts.bootstrapCrossSigning) {
-                // XXX: workaround https://github.com/matrix-org/matrix-rust-sdk/issues/2193
-                //   wait for out device list to be available, as a proxy for the device keys having been uploaded.
-                await cli.getCrypto()!.getUserDeviceInfo([credentials.userId]);
-
                 await cli.getCrypto()!.bootstrapCrossSigning({
                     authUploadDeviceSigningKeys: async (func) => {
                         await func({
@@ -335,8 +331,8 @@ function getLogger(win: Cypress.AUTWindow, loggerName: string): Logger {
     const logger = loglevel.getLogger(loggerName);
 
     // If this is the first time this logger has been returned, turn it into a `Logger` and set the default level
-    if (!("extend" in logger)) {
-        logger["extend"] = (namespace: string) => getLogger(win, loggerName + ":" + namespace);
+    if (!("getChild" in logger)) {
+        logger["getChild"] = (namespace: string) => getLogger(win, loggerName + ":" + namespace);
         logger.methodFactory = makeLogMethodFactory(win);
         logger.setLevel(loglevel.levels.DEBUG);
     }
