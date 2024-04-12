@@ -17,18 +17,20 @@ limitations under the License.
 import { test as base, expect as baseExpect, Locator, Page, ExpectMatcherState, ElementHandle } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import _ from "lodash";
+import { basename } from "node:path";
 
 import type mailhog from "mailhog";
 import type { IConfigOptions } from "../src/IConfigOptions";
 import { Credentials, Homeserver, HomeserverInstance, StartHomeserverOpts } from "./plugins/homeserver";
 import { Synapse } from "./plugins/homeserver/synapse";
 import { Dendrite, Pinecone } from "./plugins/homeserver/dendrite";
-import { Instance } from "./plugins/mailhog";
+import { Instance, MailHogServer } from "./plugins/mailhog";
 import { ElementAppPage } from "./pages/ElementAppPage";
 import { OAuthServer } from "./plugins/oauth_server";
 import { Crypto } from "./pages/crypto";
 import { Toasts } from "./pages/toasts";
 import { Bot, CreateBotOpts } from "./pages/bot";
+import { ProxyInstance, SlidingSyncProxy } from "./plugins/sliding-sync-proxy";
 import { Webserver } from "./plugins/webserver";
 
 const CONFIG_JSON: Partial<IConfigOptions> = {
@@ -71,16 +73,27 @@ export const test = base.extend<
         homeserver: HomeserverInstance;
         oAuthServer: { port: number };
         credentials: CredentialsWithDisplayName;
+
+        /**
+         * The same as {@link https://playwright.dev/docs/api/class-fixtures#fixtures-page|`page`},
+         * but adds an initScript which will populate localStorage with the user's details from
+         * {@link #credentials} and {@link #homeserver}.
+         *
+         * Similar to {@link #user}, but doesn't load the app.
+         */
+        pageWithCredentials: Page;
+
         user: CredentialsWithDisplayName;
         displayName?: string;
         app: ElementAppPage;
-        mailhog?: { api: mailhog.API; instance: Instance };
+        mailhog: { api: mailhog.API; instance: Instance };
         crypto: Crypto;
         room?: { roomId: string };
         toasts: Toasts;
         uut?: Locator; // Unit Under Test, useful place to refer a prepared locator
         botCreateOpts: CreateBotOpts;
         bot: Bot;
+        slidingSyncProxy: ProxyInstance;
         labsFlags: string[];
         webserver: Webserver;
     }
@@ -98,17 +111,17 @@ export const test = base.extend<
                     return obj;
                 }, {}),
             };
-            if (cryptoBackend === "rust") {
-                json.features.feature_rust_crypto = true;
+            // the default is to use rust now, so set to `false` if on legacy backend
+            if (cryptoBackend === "legacy") {
+                json.features.feature_rust_crypto = false;
             }
             await route.fulfill({ json });
         });
-
         await use(page);
     },
 
     startHomeserverOpts: "default",
-    homeserver: async ({ request, startHomeserverOpts: opts }, use) => {
+    homeserver: async ({ request, startHomeserverOpts: opts }, use, testInfo) => {
         if (typeof opts === "string") {
             opts = { template: opts };
         }
@@ -127,7 +140,16 @@ export const test = base.extend<
         }
 
         await use(await server.start(opts));
-        await server.stop();
+        const logs = await server.stop();
+
+        if (testInfo.status !== "passed") {
+            for (const path of logs) {
+                await testInfo.attach(`homeserver-${basename(path)}`, {
+                    path,
+                    contentType: "text/plain",
+                });
+            }
+        }
     },
     // eslint-disable-next-line no-empty-pattern
     oAuthServer: async ({}, use) => {
@@ -152,7 +174,8 @@ export const test = base.extend<
         });
     },
     labsFlags: [],
-    user: async ({ page, homeserver, credentials }, use) => {
+
+    pageWithCredentials: async ({ page, homeserver, credentials }, use) => {
         await page.addInitScript(
             ({ baseUrl, credentials }) => {
                 // Seed the localStorage with the required credentials
@@ -169,10 +192,12 @@ export const test = base.extend<
             },
             { baseUrl: homeserver.config.baseUrl, credentials },
         );
+        await use(page);
+    },
+
+    user: async ({ pageWithCredentials: page, credentials }, use) => {
         await page.goto("/");
-
         await page.waitForSelector(".mx_MatrixChat", { timeout: 30000 });
-
         await use(credentials);
     },
 
@@ -207,6 +232,33 @@ export const test = base.extend<
         const bot = new Bot(page, homeserver, botCreateOpts);
         await bot.prepareClient(); // eagerly register the bot
         await use(bot);
+    },
+
+    // eslint-disable-next-line no-empty-pattern
+    mailhog: async ({}, use) => {
+        const mailhog = new MailHogServer();
+        const instance = await mailhog.start();
+        await use(instance);
+        await mailhog.stop();
+    },
+
+    slidingSyncProxy: async ({ page, user, homeserver }, use) => {
+        const proxy = new SlidingSyncProxy(homeserver.config.dockerUrl);
+        const proxyInstance = await proxy.start();
+        const proxyAddress = `http://localhost:${proxyInstance.port}`;
+        await page.addInitScript((proxyAddress) => {
+            window.localStorage.setItem(
+                "mx_local_settings",
+                JSON.stringify({
+                    feature_sliding_sync_proxy_url: proxyAddress,
+                }),
+            );
+            window.localStorage.setItem("mx_labs_feature_feature_sliding_sync", "true");
+        }, proxyAddress);
+        await page.goto("/");
+        await page.waitForSelector(".mx_MatrixChat", { timeout: 30000 });
+        await use(proxyInstance);
+        await proxy.stop();
     },
 
     // eslint-disable-next-line no-empty-pattern
@@ -250,6 +302,10 @@ export const expect = baseExpect.extend({
                 .mx_ReplyChain {
                     border-left-color: var(--cpd-color-blue-1200) !important;
                 }
+                /* Use monospace font for timestamp for consistent mask width */
+                .mx_MessageTimestamp {
+                    font-family: Inconsolata !important;
+                }
                 ${options?.css ?? ""}
             `,
         })) as ElementHandle<Element>;
@@ -259,8 +315,4 @@ export const expect = baseExpect.extend({
         await style.evaluate((tag) => tag.remove());
         return { pass: true, message: () => "", name: "toMatchScreenshot" };
     },
-});
-
-test.use({
-    permissions: ["clipboard-read"],
 });

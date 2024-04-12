@@ -16,8 +16,8 @@ limitations under the License.
 
 import React, { createRef, SyntheticEvent, MouseEvent } from "react";
 import ReactDOM from "react-dom";
-import highlight from "highlight.js";
 import { MsgType } from "matrix-js-sdk/src/matrix";
+import { TooltipProvider } from "@vector-im/compound-web";
 
 import * as HtmlUtils from "../../../HtmlUtils";
 import { formatDate } from "../../../DateUtils";
@@ -237,7 +237,9 @@ export default class TextualBody extends React.Component<IBodyProps, IState> {
         pre.append(document.createElement("span"));
     }
 
-    private highlightCode(code: HTMLElement): void {
+    private async highlightCode(code: HTMLElement): Promise<void> {
+        const { default: highlight } = await import("highlight.js");
+
         if (code.textContent && code.textContent.length > MAX_HIGHLIGHT_LENGTH) {
             console.log(
                 "Code block is bigger than highlight limit (" +
@@ -347,7 +349,11 @@ export default class TextualBody extends React.Component<IBodyProps, IState> {
 
                 const reason = node.getAttribute("data-mx-spoiler") ?? undefined;
                 node.removeAttribute("data-mx-spoiler"); // we don't want to recurse
-                const spoiler = <Spoiler reason={reason} contentHtml={node.outerHTML} />;
+                const spoiler = (
+                    <TooltipProvider>
+                        <Spoiler reason={reason} contentHtml={node.outerHTML} />
+                    </TooltipProvider>
+                );
 
                 ReactDOM.render(spoiler, spoilerContainer);
                 node.parentNode?.replaceChild(spoilerContainer, node);

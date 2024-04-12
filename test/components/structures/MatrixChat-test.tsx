@@ -38,6 +38,7 @@ import {
     filterConsole,
     flushPromises,
     getMockClientWithEventEmitter,
+    mockClientMethodsServer,
     mockClientMethodsUser,
     MockClientWithEventEmitter,
     mockPlatformPeg,
@@ -57,10 +58,14 @@ import * as Lifecycle from "../../../src/Lifecycle";
 import { SSO_HOMESERVER_URL_KEY, SSO_ID_SERVER_URL_KEY } from "../../../src/BasePlatform";
 import SettingsStore from "../../../src/settings/SettingsStore";
 import { SettingLevel } from "../../../src/settings/SettingLevel";
+import { MatrixClientPeg as peg } from "../../../src/MatrixClientPeg";
 
 jest.mock("matrix-js-sdk/src/oidc/authorize", () => ({
     completeAuthorizationCodeGrant: jest.fn(),
 }));
+
+/** The matrix versions our mock server claims to support */
+const SERVER_SUPPORTED_MATRIX_VERSIONS = ["v1.1", "v1.5", "v1.6", "v1.8", "v1.9"];
 
 describe("<MatrixChat />", () => {
     const userId = "@alice:server.org";
@@ -69,7 +74,8 @@ describe("<MatrixChat />", () => {
     // reused in createClient mock below
     const getMockClientMethods = () => ({
         ...mockClientMethodsUser(userId),
-        getVersions: jest.fn().mockResolvedValue({ versions: ["v1.1"] }),
+        ...mockClientMethodsServer(),
+        getVersions: jest.fn().mockResolvedValue({ versions: SERVER_SUPPORTED_MATRIX_VERSIONS }),
         startClient: jest.fn(),
         stopClient: jest.fn(),
         setCanResetTimelineCallback: jest.fn(),
@@ -81,6 +87,7 @@ describe("<MatrixChat />", () => {
         getClientWellKnown: jest.fn().mockReturnValue({}),
         isVersionSupported: jest.fn().mockResolvedValue(false),
         isCryptoEnabled: jest.fn().mockReturnValue(false),
+        initRustCrypto: jest.fn(),
         getRoom: jest.fn(),
         getMediaHandler: jest.fn().mockReturnValue({
             setVideoInput: jest.fn(),
@@ -202,7 +209,12 @@ describe("<MatrixChat />", () => {
         mockClient = getMockClientWithEventEmitter(getMockClientMethods());
         fetchMock.get("https://test.com/_matrix/client/versions", {
             unstable_features: {},
-            versions: ["v1.1"],
+            versions: SERVER_SUPPORTED_MATRIX_VERSIONS,
+        });
+        fetchMock.catch({
+            status: 404,
+            body: '{"errcode": "M_UNRECOGNIZED", "error": "Unrecognized request"}',
+            headers: { "content-type": "application/json" },
         });
 
         jest.spyOn(StorageManager, "idbLoad").mockReset();
@@ -446,8 +458,8 @@ describe("<MatrixChat />", () => {
 
                 await flushPromises();
 
-                expect(sessionStorage.getItem("mx_oidc_client_id")).toEqual(clientId);
-                expect(sessionStorage.getItem("mx_oidc_token_issuer")).toEqual(issuer);
+                expect(localStorage.getItem("mx_oidc_client_id")).toEqual(clientId);
+                expect(localStorage.getItem("mx_oidc_token_issuer")).toEqual(issuer);
             });
 
             it("should set logged in and start MatrixClient", async () => {
@@ -832,10 +844,22 @@ describe("<MatrixChat />", () => {
         });
 
         it("should show the soft-logout page", async () => {
+            // XXX This test is strange, it was working with legacy crypto
+            // without mocking the following but the initCrypto call was failing
+            // but as the exception was swallowed, the test was passing (see in `initClientCrypto`).
+            // There are several uses of the peg in the app, so during all these tests you might end-up
+            // with a real client instead of the mocked one. Not sure how reliable all these tests are.
+            const originalReplace = peg.replaceUsingCreds;
+            peg.replaceUsingCreds = jest.fn().mockResolvedValue(mockClient);
+            // @ts-ignore - need to mock this for the test
+            peg.matrixClient = mockClient;
+
             const result = getComponent();
 
             await result.findByText("You're signed out");
             expect(result.container).toMatchSnapshot();
+
+            peg.replaceUsingCreds = originalReplace;
         });
     });
 
@@ -1333,7 +1357,6 @@ describe("<MatrixChat />", () => {
                 await populateStorageForSession();
 
                 const client = new MockClientWithEventEmitter({
-                    initCrypto: jest.fn(),
                     ...getMockClientMethods(),
                 }) as unknown as Mocked<MatrixClient>;
                 jest.spyOn(MatrixJs, "createClient").mockReturnValue(client);
@@ -1341,7 +1364,7 @@ describe("<MatrixChat />", () => {
                 // intercept initCrypto and have it block until we complete the deferred
                 const initCryptoCompleteDefer = defer();
                 const initCryptoCalled = new Promise<void>((resolve) => {
-                    client.initCrypto.mockImplementation(() => {
+                    client.initRustCrypto.mockImplementation(() => {
                         resolve();
                         return initCryptoCompleteDefer.promise;
                     });

@@ -25,6 +25,16 @@ declare global {
         mxSettingsStore: {
             setValue(settingName: string, roomId: string | null, level: SettingLevel, value: any): Promise<void>;
         };
+        mxActiveWidgetStore: {
+            setWidgetPersistence(widgetId: string, roomId: string | null, val: boolean): void;
+        };
         matrixcs: typeof Matrix;
+    }
+}
+
+// Workaround for lack of strict mode not resolving complex types correctly
+declare module "matrix-js-sdk/src/http-api/index.ts" {
+    interface UploadResponse {
+        json(): Promise<object>;
     }
 }

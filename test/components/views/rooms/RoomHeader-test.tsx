@@ -16,7 +16,16 @@ limitations under the License.
 
 import React from "react";
 import { CallType, MatrixCall } from "matrix-js-sdk/src/webrtc/call";
-import { EventType, JoinRule, MatrixClient, MatrixEvent, PendingEventOrdering, Room } from "matrix-js-sdk/src/matrix";
+import {
+    EventType,
+    JoinRule,
+    MatrixClient,
+    MatrixEvent,
+    PendingEventOrdering,
+    Room,
+    RoomMember,
+} from "matrix-js-sdk/src/matrix";
+import { KnownMembership } from "matrix-js-sdk/src/types";
 import {
     createEvent,
     fireEvent,
@@ -25,12 +34,14 @@ import {
     getByRole,
     getByText,
     render,
+    RenderOptions,
     screen,
     waitFor,
 } from "@testing-library/react";
 import { ViewRoomOpts } from "@matrix-org/react-sdk-module-api/lib/lifecycles/RoomViewLifecycle";
+import { TooltipProvider } from "@vector-im/compound-web";
 
-import { filterConsole, mkEvent, stubClient, withClientContextRenderOptions } from "../../../test-utils";
+import { filterConsole, mkEvent, stubClient } from "../../../test-utils";
 import RoomHeader from "../../../../src/components/views/rooms/RoomHeader";
 import DMRoomMap from "../../../../src/utils/DMRoomMap";
 import { MatrixClientPeg } from "../../../../src/MatrixClientPeg";
@@ -44,8 +55,26 @@ import { CallStore } from "../../../../src/stores/CallStore";
 import { Call, ElementCall } from "../../../../src/models/Call";
 import * as ShieldUtils from "../../../../src/utils/ShieldUtils";
 import { Container, WidgetLayoutStore } from "../../../../src/stores/widgets/WidgetLayoutStore";
-
+import MatrixClientContext from "../../../../src/contexts/MatrixClientContext";
+import { _t } from "../../../../src/languageHandler";
+import * as UseCall from "../../../../src/hooks/useCall";
+import { SdkContextClass } from "../../../../src/contexts/SDKContext";
+import WidgetStore, { IApp } from "../../../../src/stores/WidgetStore";
+import ShareDialog from "../../../../src/components/views/dialogs/ShareDialog";
+import Modal from "../../../../src/Modal";
 jest.mock("../../../../src/utils/ShieldUtils");
+
+function getWrapper(): RenderOptions {
+    return {
+        wrapper: ({ children }) => (
+            <TooltipProvider>
+                <MatrixClientContext.Provider value={MatrixClientPeg.safeGet()}>
+                    {children}
+                </MatrixClientContext.Provider>
+            </TooltipProvider>
+        ),
+    };
+}
 
 describe("RoomHeader", () => {
     filterConsole(
@@ -76,10 +105,7 @@ describe("RoomHeader", () => {
     });
 
     it("renders the room header", () => {
-        const { container } = render(
-            <RoomHeader room={room} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        const { container } = render(<RoomHeader room={room} />, getWrapper());
         expect(container).toHaveTextContent(ROOM_ID);
     });
 
@@ -97,19 +123,13 @@ describe("RoomHeader", () => {
         });
         await room.addLiveEvents([roomTopic]);
 
-        const { container } = render(
-            <RoomHeader room={room} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        const { container } = render(<RoomHeader room={room} />, getWrapper());
         expect(container).toHaveTextContent(TOPIC);
         expect(getByRole(container, "link")).toHaveTextContent("http://element.io");
     });
 
     it("opens the room summary", async () => {
-        const { container } = render(
-            <RoomHeader room={room} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        const { container } = render(<RoomHeader room={room} />, getWrapper());
 
         fireEvent.click(getByText(container, ROOM_ID));
         expect(setCardSpy).toHaveBeenCalledWith({ phase: RightPanelPhases.RoomSummary });
@@ -135,16 +155,13 @@ describe("RoomHeader", () => {
                 name: "Member",
                 rawDisplayName: "Member",
                 roomId: room.roomId,
-                membership: "join",
+                membership: KnownMembership.Join,
                 getAvatarUrl: () => "mxc://avatar.url/image.png",
                 getMxcAvatarUrl: () => "mxc://avatar.url/image.png",
             },
         ]);
 
-        const { asFragment } = render(
-            <RoomHeader room={room} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        const { asFragment } = render(<RoomHeader room={room} />, getWrapper());
 
         expect(asFragment()).toMatchSnapshot();
     });
@@ -156,7 +173,7 @@ describe("RoomHeader", () => {
                 name: "Member",
                 rawDisplayName: "Member",
                 roomId: room.roomId,
-                membership: "join",
+                membership: KnownMembership.Join,
                 getAvatarUrl: () => "mxc://avatar.url/image.png",
                 getMxcAvatarUrl: () => "mxc://avatar.url/image.png",
             },
@@ -165,7 +182,7 @@ describe("RoomHeader", () => {
                 name: "Member",
                 rawDisplayName: "Member",
                 roomId: room.roomId,
-                membership: "join",
+                membership: KnownMembership.Join,
                 getAvatarUrl: () => "mxc://avatar.url/image.png",
                 getMxcAvatarUrl: () => "mxc://avatar.url/image.png",
             },
@@ -174,7 +191,7 @@ describe("RoomHeader", () => {
                 name: "Member",
                 rawDisplayName: "Member",
                 roomId: room.roomId,
-                membership: "join",
+                membership: KnownMembership.Join,
                 getAvatarUrl: () => "mxc://avatar.url/image.png",
                 getMxcAvatarUrl: () => "mxc://avatar.url/image.png",
             },
@@ -183,7 +200,7 @@ describe("RoomHeader", () => {
                 name: "Bot user",
                 rawDisplayName: "Bot user",
                 roomId: room.roomId,
-                membership: "join",
+                membership: KnownMembership.Join,
                 getAvatarUrl: () => "mxc://avatar.url/image.png",
                 getMxcAvatarUrl: () => "mxc://avatar.url/image.png",
             },
@@ -191,10 +208,7 @@ describe("RoomHeader", () => {
         room.currentState.setJoinedMemberCount(members.length);
         room.getJoinedMembers = jest.fn().mockReturnValue(members);
 
-        const { container } = render(
-            <RoomHeader room={room} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        const { container } = render(<RoomHeader room={room} />, getWrapper());
 
         expect(container).toHaveTextContent("4");
 
@@ -207,10 +221,7 @@ describe("RoomHeader", () => {
     });
 
     it("opens the thread panel", async () => {
-        const { container } = render(
-            <RoomHeader room={room} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        const { container } = render(<RoomHeader room={room} />, getWrapper());
 
         fireEvent.click(getByLabelText(container, "Threads"));
         expect(setCardSpy).toHaveBeenCalledWith({ phase: RightPanelPhases.ThreadPanel });
@@ -221,10 +232,7 @@ describe("RoomHeader", () => {
             if (name === "feature_notifications") return true;
         });
 
-        const { container } = render(
-            <RoomHeader room={room} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        const { container } = render(<RoomHeader room={room} />, getWrapper());
 
         fireEvent.click(getByLabelText(container, "Notifications"));
         expect(setCardSpy).toHaveBeenCalledWith({ phase: RightPanelPhases.NotificationPanel });
@@ -233,25 +241,19 @@ describe("RoomHeader", () => {
     describe("groups call disabled", () => {
         it("you can't call if you're alone", () => {
             mockRoomMembers(room, 1);
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
             for (const button of getAllByLabelText(container, "There's no one here to call")) {
-                expect(button).toBeDisabled();
+                expect(button).toHaveAttribute("aria-disabled", "true");
             }
         });
 
         it("you can call when you're two in the room", async () => {
             mockRoomMembers(room, 2);
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
             const voiceButton = getByLabelText(container, "Voice call");
             const videoButton = getByLabelText(container, "Video call");
-            expect(voiceButton).not.toBeDisabled();
-            expect(videoButton).not.toBeDisabled();
+            expect(voiceButton).not.toHaveAttribute("aria-disabled", "true");
+            expect(videoButton).not.toHaveAttribute("aria-disabled", "true");
 
             const placeCallSpy = jest.spyOn(LegacyCallHandler.instance, "placeCall");
 
@@ -268,40 +270,31 @@ describe("RoomHeader", () => {
                 // The JS-SDK does not export the class `MatrixCall` only the type
                 {} as MatrixCall,
             );
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
             for (const button of getAllByLabelText(container, "Ongoing call")) {
-                expect(button).toBeDisabled();
+                expect(button).toHaveAttribute("aria-disabled", "true");
             }
         });
 
         it("can calls in large rooms if able to edit widgets", () => {
             mockRoomMembers(room, 10);
             jest.spyOn(room.currentState, "mayClientSendStateEvent").mockReturnValue(true);
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
 
-            expect(getByLabelText(container, "Voice call")).not.toBeDisabled();
-            expect(getByLabelText(container, "Video call")).not.toBeDisabled();
+            expect(getByLabelText(container, "Voice call")).not.toHaveAttribute("aria-disabled", "true");
+            expect(getByLabelText(container, "Video call")).not.toHaveAttribute("aria-disabled", "true");
         });
 
         it("disable calls in large rooms by default", () => {
             mockRoomMembers(room, 10);
             jest.spyOn(room.currentState, "mayClientSendStateEvent").mockReturnValue(false);
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
             expect(
                 getByLabelText(container, "You do not have permission to start voice calls", { selector: "button" }),
-            ).toBeDisabled();
+            ).toHaveAttribute("aria-disabled", "true");
             expect(
                 getByLabelText(container, "You do not have permission to start video calls", { selector: "button" }),
-            ).toBeDisabled();
+            ).toHaveAttribute("aria-disabled", "true");
         });
     });
 
@@ -316,15 +309,12 @@ describe("RoomHeader", () => {
             // allow element calls
             jest.spyOn(room.currentState, "mayClientSendStateEvent").mockReturnValue(true);
 
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
 
             expect(screen.queryByTitle("Voice call")).toBeNull();
 
             const videoCallButton = getByLabelText(container, "Video call");
-            expect(videoCallButton).not.toBeDisabled();
+            expect(videoCallButton).not.toHaveAttribute("aria-disabled", "true");
 
             const dispatcherSpy = jest.spyOn(dispatcher, "dispatch");
 
@@ -338,31 +328,33 @@ describe("RoomHeader", () => {
             // allow element calls
             jest.spyOn(room.currentState, "mayClientSendStateEvent").mockReturnValue(true);
             jest.spyOn(WidgetLayoutStore.instance, "isInContainer").mockReturnValue(true);
-
-            jest.spyOn(CallStore.instance, "getCall").mockReturnValue({ widget: {} } as Call);
-
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
-            expect(getByLabelText(container, "Ongoing call")).toBeDisabled();
+            const widget = { type: "m.jitsi" } as IApp;
+            jest.spyOn(CallStore.instance, "getCall").mockReturnValue({
+                widget,
+                on: () => {},
+            } as unknown as Call);
+            jest.spyOn(WidgetStore.instance, "getApps").mockReturnValue([widget]);
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            expect(getByLabelText(container, "Ongoing call")).toHaveAttribute("aria-disabled", "true");
         });
 
         it("clicking on ongoing (unpinned) call re-pins it", () => {
-            jest.spyOn(SdkConfig, "get").mockReturnValue({ use_exclusively: true });
-            // allow element calls
+            mockRoomMembers(room, 3);
+            jest.spyOn(SettingsStore, "getValue").mockReturnValue(false);
+            // allow calls
             jest.spyOn(room.currentState, "mayClientSendStateEvent").mockReturnValue(true);
             jest.spyOn(WidgetLayoutStore.instance, "isInContainer").mockReturnValue(false);
             const spy = jest.spyOn(WidgetLayoutStore.instance, "moveToContainer");
 
-            const widget = {};
-            jest.spyOn(CallStore.instance, "getCall").mockReturnValue({ widget } as Call);
+            const widget = { type: "m.jitsi" } as IApp;
+            jest.spyOn(CallStore.instance, "getCall").mockReturnValue({
+                widget,
+                on: () => {},
+            } as unknown as Call);
+            jest.spyOn(WidgetStore.instance, "getApps").mockReturnValue([widget]);
 
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
-            expect(getByLabelText(container, "Video call")).not.toBeDisabled();
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            expect(getByLabelText(container, "Video call")).not.toHaveAttribute("aria-disabled", "true");
             fireEvent.click(getByLabelText(container, "Video call"));
             expect(spy).toHaveBeenCalledWith(room, widget, Container.Top);
         });
@@ -373,37 +365,32 @@ describe("RoomHeader", () => {
                 // The JS-SDK does not export the class `MatrixCall` only the type
                 {} as MatrixCall,
             );
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
             for (const button of getAllByLabelText(container, "Ongoing call")) {
-                expect(button).toBeDisabled();
+                expect(button).toHaveAttribute("aria-disabled", "true");
             }
         });
 
         it("can't call if you have no friends", () => {
             mockRoomMembers(room, 1);
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
             for (const button of getAllByLabelText(container, "There's no one here to call")) {
-                expect(button).toBeDisabled();
+                expect(button).toHaveAttribute("aria-disabled", "true");
             }
         });
 
         it("calls using legacy or jitsi", async () => {
             mockRoomMembers(room, 2);
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            jest.spyOn(room.currentState, "mayClientSendStateEvent").mockImplementation((key) => {
+                if (key === "im.vector.modular.widgets") return true;
+                return false;
+            });
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
 
             const voiceButton = getByLabelText(container, "Voice call");
             const videoButton = getByLabelText(container, "Video call");
-            expect(voiceButton).not.toBeDisabled();
-            expect(videoButton).not.toBeDisabled();
+            expect(voiceButton).not.toHaveAttribute("aria-disabled", "true");
+            expect(videoButton).not.toHaveAttribute("aria-disabled", "true");
 
             const placeCallSpy = jest.spyOn(LegacyCallHandler.instance, "placeCall");
             fireEvent.click(voiceButton);
@@ -421,15 +408,12 @@ describe("RoomHeader", () => {
                 return false;
             });
 
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
 
             const voiceButton = getByLabelText(container, "Voice call");
             const videoButton = getByLabelText(container, "Video call");
-            expect(voiceButton).not.toBeDisabled();
-            expect(videoButton).not.toBeDisabled();
+            expect(voiceButton).not.toHaveAttribute("aria-disabled", "true");
+            expect(videoButton).not.toHaveAttribute("aria-disabled", "true");
 
             const placeCallSpy = jest.spyOn(LegacyCallHandler.instance, "placeCall");
             fireEvent.click(voiceButton);
@@ -439,28 +423,180 @@ describe("RoomHeader", () => {
             expect(placeCallSpy).toHaveBeenLastCalledWith(room.roomId, CallType.Video);
         });
 
-        it("calls using element calls for large rooms", async () => {
+        it("calls using element call for large rooms", async () => {
             mockRoomMembers(room, 3);
 
             jest.spyOn(room.currentState, "mayClientSendStateEvent").mockImplementation((key) => {
-                if (key === "im.vector.modular.widgets") return true;
-                if (key === ElementCall.CALL_EVENT_TYPE.name) return true;
+                if (key === ElementCall.MEMBER_EVENT_TYPE.name) return true;
                 return false;
             });
 
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
 
             const voiceButton = getByLabelText(container, "Voice call");
             const videoButton = getByLabelText(container, "Video call");
-            expect(voiceButton).not.toBeDisabled();
-            expect(videoButton).not.toBeDisabled();
+            expect(voiceButton).not.toHaveAttribute("aria-disabled", "true");
+            expect(videoButton).not.toHaveAttribute("aria-disabled", "true");
 
             const dispatcherSpy = jest.spyOn(dispatcher, "dispatch");
             fireEvent.click(videoButton);
             expect(dispatcherSpy).toHaveBeenCalledWith(expect.objectContaining({ view_call: true }));
+        });
+
+        it("buttons are disabled if there is an ongoing call", async () => {
+            mockRoomMembers(room, 3);
+
+            jest.spyOn(CallStore.prototype, "activeCalls", "get").mockReturnValue(
+                new Set([{ roomId: "some_other_room" } as Call]),
+            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+
+            const [videoButton, voiceButton] = getAllByLabelText(container, "Ongoing call");
+
+            expect(voiceButton).toHaveAttribute("aria-disabled", "true");
+            expect(videoButton).toHaveAttribute("aria-disabled", "true");
+        });
+
+        it("join button is shown if there is an ongoing call", async () => {
+            mockRoomMembers(room, 3);
+            jest.spyOn(UseCall, "useParticipantCount").mockReturnValue(3);
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            const joinButton = getByLabelText(container, "Join");
+            expect(joinButton).not.toHaveAttribute("aria-disabled", "true");
+        });
+
+        it("join button is disabled if there is an other ongoing call", async () => {
+            mockRoomMembers(room, 3);
+            jest.spyOn(UseCall, "useParticipantCount").mockReturnValue(3);
+            jest.spyOn(CallStore.prototype, "activeCalls", "get").mockReturnValue(
+                new Set([{ roomId: "some_other_room" } as Call]),
+            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            const joinButton = getByLabelText(container, "Ongoing call");
+
+            expect(joinButton).toHaveAttribute("aria-disabled", "true");
+        });
+
+        it("close lobby button is shown", async () => {
+            mockRoomMembers(room, 3);
+
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(true);
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            getByLabelText(container, "Close lobby");
+        });
+
+        it("close lobby button is shown if there is an ongoing call but we are viewing the lobby", async () => {
+            mockRoomMembers(room, 3);
+            jest.spyOn(UseCall, "useParticipantCount").mockReturnValue(3);
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(true);
+
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            getByLabelText(container, "Close lobby");
+        });
+    });
+
+    describe("External conference", () => {
+        const oldGet = SdkConfig.get;
+        beforeEach(() => {
+            jest.spyOn(SdkConfig, "get").mockImplementation((key) => {
+                if (key === "element_call") {
+                    return { guest_spa_url: "https://guest_spa_url.com", url: "https://spa_url.com" };
+                }
+                return oldGet(key);
+            });
+            mockRoomMembers(room, 3);
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(true);
+        });
+
+        it("shows the external conference if the room has public join rules", () => {
+            jest.spyOn(room, "getJoinRule").mockReturnValue(JoinRule.Public);
+
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            expect(getByLabelText(container, _t("voip|get_call_link"))).toBeInTheDocument();
+        });
+
+        it("shows the external conference if the room has Knock join rules", () => {
+            jest.spyOn(room, "getJoinRule").mockReturnValue(JoinRule.Knock);
+
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            expect(getByLabelText(container, _t("voip|get_call_link"))).toBeInTheDocument();
+        });
+
+        it("don't show external conference button if the call is not shown", () => {
+            jest.spyOn(room, "getJoinRule").mockReturnValue(JoinRule.Public);
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(false);
+
+            let { container } = render(<RoomHeader room={room} />, getWrapper());
+            expect(screen.queryByLabelText(_t("voip|get_call_link"))).not.toBeInTheDocument();
+
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(true);
+
+            container = render(<RoomHeader room={room} />, getWrapper()).container;
+
+            expect(getByLabelText(container, _t("voip|get_call_link"))).toBeInTheDocument();
+        });
+
+        it("don't show external conference button if now guest spa link is configured", () => {
+            jest.spyOn(room, "getJoinRule").mockReturnValue(JoinRule.Public);
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(true);
+
+            jest.spyOn(SdkConfig, "get").mockImplementation((key) => {
+                if (key === "element_call") {
+                    return { url: "https://example2.com" };
+                }
+                return oldGet(key);
+            });
+
+            render(<RoomHeader room={room} />, getWrapper());
+
+            // We only change the SdkConfig and show that this everything else is
+            // configured so that the call link button is shown.
+
+            jest.spyOn(SdkConfig, "get").mockImplementation((key) => {
+                if (key === "element_call") {
+                    return { guest_spa_url: "https://guest_spa_url.com", url: "https://example2.com" };
+                }
+                return oldGet(key);
+            });
+
+            expect(screen.queryByLabelText(_t("voip|get_call_link"))).not.toBeInTheDocument();
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            expect(getByLabelText(container, _t("voip|get_call_link"))).toBeInTheDocument();
+        });
+        it("opens the share dialog with the correct share link in an encrypted room", () => {
+            jest.spyOn(room, "getJoinRule").mockReturnValue(JoinRule.Public);
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(true);
+            jest.spyOn(room, "hasEncryptionStateEvent").mockReturnValue(true);
+
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            const modalSpy = jest.spyOn(Modal, "createDialog");
+            fireEvent.click(getByLabelText(container, _t("voip|get_call_link")));
+            const target =
+                "https://guest_spa_url.com/room/#/!1:example.org?roomId=%211%3Aexample.org&perParticipantE2EE=true&viaServers=example.org";
+            expect(modalSpy).toHaveBeenCalled();
+            const arg0 = modalSpy.mock.calls[0][0];
+            const arg1 = modalSpy.mock.calls[0][1] as any;
+            expect(arg0).toEqual(ShareDialog);
+            const { customTitle, subtitle } = arg1;
+            expect({ customTitle, subtitle }).toEqual({
+                customTitle: "Conference invite link",
+                subtitle: _t("share|share_call_subtitle"),
+            });
+            expect(arg1.target.toString()).toEqual(target);
+        });
+
+        it("share dialog has correct link in an unencrypted room", () => {
+            jest.spyOn(room, "getJoinRule").mockReturnValue(JoinRule.Public);
+            jest.spyOn(room, "hasEncryptionStateEvent").mockReturnValue(false);
+            jest.spyOn(SdkContextClass.instance.roomViewStore, "isViewingCall").mockReturnValue(true);
+
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
+            const modalSpy = jest.spyOn(Modal, "createDialog");
+            fireEvent.click(getByLabelText(container, _t("voip|get_call_link")));
+            const target =
+                "https://guest_spa_url.com/room/#/!1:example.org?roomId=%211%3Aexample.org&viaServers=example.org";
+            const arg1 = modalSpy.mock.calls[0][1] as any;
+            expect(arg1.target.toString()).toEqual(target);
         });
     });
 
@@ -475,10 +611,7 @@ describe("RoomHeader", () => {
             });
             room.addLiveEvents([joinRuleEvent]);
 
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
 
             expect(getByLabelText(container, "Public room")).toBeInTheDocument();
         });
@@ -513,10 +646,7 @@ describe("RoomHeader", () => {
         ])("shows the %s icon", async (value: ShieldUtils.E2EStatus, expectedLabel: string) => {
             jest.spyOn(ShieldUtils, "shieldStatusForRoom").mockResolvedValue(value);
 
-            const { container } = render(
-                <RoomHeader room={room} />,
-                withClientContextRenderOptions(MatrixClientPeg.get()!),
-            );
+            const { container } = render(<RoomHeader room={room} />, getWrapper());
 
             await waitFor(() => expect(getByLabelText(container, expectedLabel)).toBeInTheDocument());
         });
@@ -531,10 +661,7 @@ describe("RoomHeader", () => {
                 onClick: () => {},
             },
         ];
-        render(
-            <RoomHeader room={room} additionalButtons={additionalButtons} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        render(<RoomHeader room={room} additionalButtons={additionalButtons} />, getWrapper());
         expect(screen.getByRole("button", { name: "test-label" })).toBeInTheDocument();
     });
 
@@ -549,10 +676,7 @@ describe("RoomHeader", () => {
             },
         ];
 
-        render(
-            <RoomHeader room={room} additionalButtons={additionalButtons} />,
-            withClientContextRenderOptions(MatrixClientPeg.get()!),
-        );
+        render(<RoomHeader room={room} additionalButtons={additionalButtons} />, getWrapper());
 
         const button = screen.getByRole("button", { name: "test-label" });
         const event = createEvent.click(button);
@@ -561,6 +685,25 @@ describe("RoomHeader", () => {
 
         expect(callback).toHaveBeenCalled();
         expect(event.stopPropagation).toHaveBeenCalled();
+    });
+
+    describe("ask to join disabled", () => {
+        it("does not render the RoomKnocksBar", () => {
+            render(<RoomHeader room={room} />, getWrapper());
+            expect(screen.queryByRole("heading", { name: "Asking to join" })).not.toBeInTheDocument();
+        });
+    });
+
+    describe("ask to join enabled", () => {
+        it("does render the RoomKnocksBar", () => {
+            jest.spyOn(SettingsStore, "getValue").mockImplementation((feature) => feature === "feature_ask_to_join");
+            jest.spyOn(room, "canInvite").mockReturnValue(true);
+            jest.spyOn(room, "getJoinRule").mockReturnValue(JoinRule.Knock);
+            jest.spyOn(room, "getMembersWithMembership").mockReturnValue([new RoomMember(room.roomId, "@foo")]);
+
+            render(<RoomHeader room={room} />, getWrapper());
+            expect(screen.getByRole("heading", { name: "Asking to join" })).toBeInTheDocument();
+        });
     });
 });
 
@@ -576,7 +719,7 @@ function mockRoomMembers(room: Room, count: number) {
             name: `Member ${index}`,
             rawDisplayName: `Member ${index}`,
             roomId: room.roomId,
-            membership: "join",
+            membership: KnownMembership.Join,
             getAvatarUrl: () => `mxc://avatar.url/user-${index}.png`,
             getMxcAvatarUrl: () => `mxc://avatar.url/user-${index}.png`,
         }));

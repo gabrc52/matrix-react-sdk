@@ -18,15 +18,29 @@ import { type Locator, type Page, expect } from "@playwright/test";
 
 import { Settings } from "./settings";
 import { Client } from "./client";
-import { Labs } from "./labs";
+import { Timeline } from "./timeline";
 import { Spotlight } from "./Spotlight";
 
 export class ElementAppPage {
     public constructor(public readonly page: Page) {}
 
-    public labs = new Labs(this.page);
-    public settings = new Settings(this.page);
-    public client: Client = new Client(this.page);
+    // We create these lazily on first access to avoid calling setup code which might cause conflicts,
+    // e.g. the network routing code in the client subfixture.
+    private _settings?: Settings;
+    public get settings(): Settings {
+        if (!this._settings) this._settings = new Settings(this.page);
+        return this._settings;
+    }
+    private _client?: Client;
+    public get client(): Client {
+        if (!this._client) this._client = new Client(this.page);
+        return this._client;
+    }
+    private _timeline?: Timeline;
+    public get timeline(): Timeline {
+        if (!this._timeline) this._timeline = new Timeline(this.page);
+        return this._timeline;
+    }
 
     /**
      * Open the top left user menu, returning a Locator to the resulting context menu.
@@ -53,15 +67,6 @@ export class ElementAppPage {
 
     public async getClipboard(): Promise<string> {
         return await this.page.evaluate(() => navigator.clipboard.readText());
-    }
-
-    /**
-     * Find an open dialog by its title
-     */
-    public async getDialogByTitle(title: string, timeout = 5000): Promise<Locator> {
-        const dialog = this.page.locator(".mx_Dialog");
-        await dialog.getByRole("heading", { name: title }).waitFor({ timeout });
-        return dialog;
     }
 
     /**
@@ -103,6 +108,14 @@ export class ElementAppPage {
     public getComposer(isRightPanel?: boolean): Locator {
         const panelClass = isRightPanel ? ".mx_RightPanel" : ".mx_RoomView_body";
         return this.page.locator(`${panelClass} .mx_MessageComposer`);
+    }
+
+    /**
+     * Get the composer input field
+     * @param isRightPanel whether to select the right panel composer, otherwise the main timeline composer
+     */
+    public getComposerField(isRightPanel?: boolean): Locator {
+        return this.getComposer(isRightPanel).locator("[contenteditable]");
     }
 
     /**

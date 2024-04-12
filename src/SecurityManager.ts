@@ -14,8 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { DeviceVerificationStatus, ICryptoCallbacks, MatrixClient, encodeBase64 } from "matrix-js-sdk/src/matrix";
-import { ISecretStorageKeyInfo } from "matrix-js-sdk/src/crypto/api";
+import {
+    DeviceVerificationStatus,
+    ICryptoCallbacks,
+    MatrixClient,
+    encodeBase64,
+    SecretStorage,
+} from "matrix-js-sdk/src/matrix";
 import { deriveKey } from "matrix-js-sdk/src/crypto/key_passphrase";
 import { decodeRecoveryKey } from "matrix-js-sdk/src/crypto/recoverykey";
 import { logger } from "matrix-js-sdk/src/logger";
@@ -38,14 +43,14 @@ import InteractiveAuthDialog from "./components/views/dialogs/InteractiveAuthDia
 // single secret storage operation, as it will clear the cached keys once the
 // operation ends.
 let secretStorageKeys: Record<string, Uint8Array> = {};
-let secretStorageKeyInfo: Record<string, ISecretStorageKeyInfo> = {};
+let secretStorageKeyInfo: Record<string, SecretStorage.SecretStorageKeyDescription> = {};
 let secretStorageBeingAccessed = false;
 
 let nonInteractive = false;
 
 let dehydrationCache: {
     key?: Uint8Array;
-    keyInfo?: ISecretStorageKeyInfo;
+    keyInfo?: SecretStorage.SecretStorageKeyDescription;
 } = {};
 
 function isCachingAllowed(): boolean {
@@ -80,7 +85,9 @@ async function confirmToDismiss(): Promise<boolean> {
     return !sure;
 }
 
-function makeInputToKey(keyInfo: ISecretStorageKeyInfo): (keyParams: KeyParams) => Promise<Uint8Array> {
+function makeInputToKey(
+    keyInfo: SecretStorage.SecretStorageKeyDescription,
+): (keyParams: KeyParams) => Promise<Uint8Array> {
     return async ({ passphrase, recoveryKey }): Promise<Uint8Array> => {
         if (passphrase) {
             return deriveKey(passphrase, keyInfo.passphrase.salt, keyInfo.passphrase.iterations);
@@ -94,11 +101,11 @@ function makeInputToKey(keyInfo: ISecretStorageKeyInfo): (keyParams: KeyParams) 
 async function getSecretStorageKey({
     keys: keyInfos,
 }: {
-    keys: Record<string, ISecretStorageKeyInfo>;
+    keys: Record<string, SecretStorage.SecretStorageKeyDescription>;
 }): Promise<[string, Uint8Array]> {
     const cli = MatrixClientPeg.safeGet();
     let keyId = await cli.getDefaultSecretStorageKeyId();
-    let keyInfo!: ISecretStorageKeyInfo;
+    let keyInfo!: SecretStorage.SecretStorageKeyDescription;
     if (keyId) {
         // use the default SSSS key if set
         keyInfo = keyInfos[keyId];
@@ -177,7 +184,7 @@ async function getSecretStorageKey({
 }
 
 export async function getDehydrationKey(
-    keyInfo: ISecretStorageKeyInfo,
+    keyInfo: SecretStorage.SecretStorageKeyDescription,
     checkFunc: (data: Uint8Array) => void,
 ): Promise<Uint8Array> {
     const keyFromCustomisations = SecurityCustomisations.getSecretStorageKey?.();
@@ -226,7 +233,11 @@ export async function getDehydrationKey(
     return key;
 }
 
-function cacheSecretStorageKey(keyId: string, keyInfo: ISecretStorageKeyInfo, key: Uint8Array): void {
+function cacheSecretStorageKey(
+    keyId: string,
+    keyInfo: SecretStorage.SecretStorageKeyDescription,
+    key: Uint8Array,
+): void {
     if (isCachingAllowed()) {
         secretStorageKeys[keyId] = key;
         secretStorageKeyInfo[keyId] = keyInfo;
@@ -300,6 +311,28 @@ export async function promptForBackupPassphrase(): Promise<Uint8Array> {
 }
 
 /**
+ * Carry out an operation that may require multiple accesses to secret storage, caching the key.
+ *
+ * Use this helper to wrap an operation that may require multiple accesses to secret storage; the user will be prompted
+ * to enter the 4S key or passphrase on the first access, and the key will be cached for the rest of the operation.
+ *
+ * @param func - The operation to be wrapped.
+ */
+export async function withSecretStorageKeyCache<T>(func: () => Promise<T>): Promise<T> {
+    secretStorageBeingAccessed = true;
+    try {
+        return await func();
+    } finally {
+        // Clear secret storage key cache now that work is complete
+        secretStorageBeingAccessed = false;
+        if (!isCachingAllowed()) {
+            secretStorageKeys = {};
+            secretStorageKeyInfo = {};
+        }
+    }
+}
+
+/**
  * This helper should be used whenever you need to access secret storage. It
  * ensures that secret storage (and also cross-signing since they each depend on
  * each other in a cycle of sorts) have been bootstrapped before running the
@@ -319,14 +352,13 @@ export async function promptForBackupPassphrase(): Promise<Uint8Array> {
  * @param {Function} [func] An operation to perform once secret storage has been
  * bootstrapped. Optional.
  * @param {bool} [forceReset] Reset secret storage even if it's already set up
- * @param {bool} [setupNewKeyBackup] Reset secret storage even if it's already set up
  */
-export async function accessSecretStorage(
-    func = async (): Promise<void> => {},
-    forceReset = false,
-    setupNewKeyBackup = true,
-): Promise<void> {
-    secretStorageBeingAccessed = true;
+export async function accessSecretStorage(func = async (): Promise<void> => {}, forceReset = false): Promise<void> {
+    await withSecretStorageKeyCache(() => doAccessSecretStorage(func, forceReset));
+}
+
+/** Helper for {@link #accessSecretStorage} */
+async function doAccessSecretStorage(func: () => Promise<void>, forceReset: boolean): Promise<void> {
     try {
         const cli = MatrixClientPeg.safeGet();
         if (!(await cli.hasSecretStorageKey()) || forceReset) {
@@ -377,7 +409,6 @@ export async function accessSecretStorage(
             });
             await crypto.bootstrapSecretStorage({
                 getKeyBackupPassphrase: promptForBackupPassphrase,
-                setupNewKeyBackup,
             });
 
             const keyId = Object.keys(secretStorageKeys)[0];
@@ -403,13 +434,6 @@ export async function accessSecretStorage(
         logger.error(e);
         // Re-throw so that higher level logic can abort as needed
         throw e;
-    } finally {
-        // Clear secret storage key cache now that work is complete
-        secretStorageBeingAccessed = false;
-        if (!isCachingAllowed()) {
-            secretStorageKeys = {};
-            secretStorageKeyInfo = {};
-        }
     }
 }
 

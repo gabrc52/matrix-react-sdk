@@ -23,7 +23,10 @@ import { PosthogAnalytics } from "./PosthogAnalytics";
 export class DecryptionFailure {
     public readonly ts: number;
 
-    public constructor(public readonly failedEventId: string, public readonly errorCode: string) {
+    public constructor(
+        public readonly failedEventId: string,
+        public readonly errorCode: string,
+    ) {
         this.ts = Date.now();
     }
 }
@@ -90,11 +93,11 @@ export class DecryptionFailureTracker {
     public static TRACK_INTERVAL_MS = 60000;
 
     // Call `checkFailures` every `CHECK_INTERVAL_MS`.
-    public static CHECK_INTERVAL_MS = 5000;
+    public static CHECK_INTERVAL_MS = 40000;
 
     // Give events a chance to be decrypted by waiting `GRACE_PERIOD_MS` before counting
     // the failure in `failureCounts`.
-    public static GRACE_PERIOD_MS = 4000;
+    public static GRACE_PERIOD_MS = 30000;
 
     /**
      * Create a new DecryptionFailureTracker.
@@ -110,7 +113,10 @@ export class DecryptionFailureTracker {
      * @param {function?} errorCodeMapFn The function used to map error codes to the
      * trackedErrorCode. If not provided, the `.code` of errors will be used.
      */
-    private constructor(private readonly fn: TrackingFn, private readonly errorCodeMapFn: ErrCodeMapFn) {
+    private constructor(
+        private readonly fn: TrackingFn,
+        private readonly errorCodeMapFn: ErrCodeMapFn,
+    ) {
         if (!fn || typeof fn !== "function") {
             throw new Error("DecryptionFailureTracker requires tracking function");
         }

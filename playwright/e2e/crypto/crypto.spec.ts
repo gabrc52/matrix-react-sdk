@@ -152,6 +152,12 @@ test.describe("Cryptography", function () {
                     await app.client.bootstrapCrossSigning(aliceCredentials);
                 }
 
+                await page.route("**/_matrix/client/v3/keys/signatures/upload", async (route) => {
+                    // We delay this API otherwise the `Setting up keys` may happen too quickly and cause flakiness
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    await route.continue();
+                });
+
                 await app.settings.openUserSettings("Security & Privacy");
                 await page.getByRole("button", { name: "Set up Secure Backup" }).click();
 
@@ -211,6 +217,43 @@ test.describe("Cryptography", function () {
             });
         });
     }
+
+    test("Can reset cross-signing keys", async ({ page, app, user: aliceCredentials }) => {
+        const secretStorageKey = await enableKeyBackup(app);
+
+        // Fetch the current cross-signing keys
+        async function fetchMasterKey() {
+            return await test.step("Fetch master key from server", async () => {
+                const k = await app.client.evaluate(async (cli) => {
+                    const userId = cli.getUserId();
+                    const keys = await cli.downloadKeysForUsers([userId]);
+                    return Object.values(keys.master_keys[userId].keys)[0];
+                });
+                console.log(`fetchMasterKey: ${k}`);
+                return k;
+            });
+        }
+        const masterKey1 = await fetchMasterKey();
+
+        // Find the "reset cross signing" button, and click it
+        await app.settings.openUserSettings("Security & Privacy");
+        await page.locator("div.mx_CrossSigningPanel_buttonRow").getByRole("button", { name: "Reset" }).click();
+
+        // Confirm
+        await page.getByRole("button", { name: "Clear cross-signing keys" }).click();
+
+        // Enter the 4S key
+        await page.getByPlaceholder("Security Key").fill(secretStorageKey);
+        await page.getByRole("button", { name: "Continue" }).click();
+
+        await expect(async () => {
+            const masterKey2 = await fetchMasterKey();
+            expect(masterKey1).not.toEqual(masterKey2);
+        }).toPass();
+
+        // The dialog should have gone away
+        await expect(page.locator(".mx_Dialog")).toHaveCount(1);
+    });
 
     test("creating a DM should work, being e2e-encrypted / user verification", async ({
         page,
@@ -299,7 +342,8 @@ test.describe("Cryptography", function () {
             await expect(last).toContainText("Unable to decrypt message");
             const lastE2eIcon = last.locator(".mx_EventTile_e2eIcon");
             await expect(lastE2eIcon).toHaveClass(/mx_EventTile_e2eIcon_decryption_failure/);
-            await expect(lastE2eIcon).toHaveAttribute("aria-label", "This message could not be decrypted");
+            await lastE2eIcon.focus();
+            await expect(page.getByRole("tooltip")).toContainText("This message could not be decrypted");
 
             /* Should show a red padlock for an unencrypted message in an e2e room */
             await bob.evaluate(
@@ -318,7 +362,8 @@ test.describe("Cryptography", function () {
 
             await expect(last).toContainText("test unencrypted");
             await expect(lastE2eIcon).toHaveClass(/mx_EventTile_e2eIcon_warning/);
-            await expect(lastE2eIcon).toHaveAttribute("aria-label", "Not encrypted");
+            await lastE2eIcon.focus();
+            await expect(page.getByRole("tooltip")).toContainText("Not encrypted");
 
             /* Should show no padlock for an unverified user */
             // bob sends a valid event
@@ -350,10 +395,8 @@ test.describe("Cryptography", function () {
             await bobSecondDevice.sendMessage(testRoomId, "test encrypted from unverified");
             await expect(lastTile).toContainText("test encrypted from unverified");
             await expect(lastTileE2eIcon).toHaveClass(/mx_EventTile_e2eIcon_warning/);
-            await expect(lastTileE2eIcon).toHaveAttribute(
-                "aria-label",
-                "Encrypted by a device not verified by its owner.",
-            );
+            await lastTileE2eIcon.focus();
+            await expect(page.getByRole("tooltip")).toContainText("Encrypted by a device not verified by its owner.");
 
             /* Should show a grey padlock for a message from an unknown device */
             // bob deletes his second device
@@ -391,11 +434,11 @@ test.describe("Cryptography", function () {
             } else {
                 await expect(lastE2eIcon).toHaveClass(/mx_EventTile_e2eIcon_normal/);
             }
-            await expect(lastE2eIcon).toHaveAttribute("aria-label", "Encrypted by an unknown or deleted device.");
+            await lastE2eIcon.focus();
+            await expect(page.getByRole("tooltip")).toContainText("Encrypted by an unknown or deleted device.");
         });
 
-        // XXX: Failed since migration to Playwright
-        test.skip("Should show a grey padlock for a key restored from backup", async ({
+        test("Should show a grey padlock for a key restored from backup", async ({
             page,
             app,
             bot: bob,
@@ -424,8 +467,16 @@ test.describe("Cryptography", function () {
             /* go back to the test room and find Bob's message again */
             await app.viewRoomById(testRoomId);
             await expect(lastTile).toContainText("test encrypted 1");
-            await expect(lastTileE2eIcon).toHaveClass(/mx_EventTile_e2eIcon_warning/);
-            await expect(lastTileE2eIcon).toHaveAttribute("aria-label", "Encrypted by an unknown or deleted device.");
+            // The gray shield would be a mx_EventTile_e2eIcon_normal. The red shield would be a mx_EventTile_e2eIcon_warning.
+            // No shield would have no div mx_EventTile_e2eIcon at all.
+            await expect(lastTileE2eIcon).toHaveClass(/mx_EventTile_e2eIcon_normal/);
+            await lastTileE2eIcon.hover();
+            // The key is coming from backup, so it is not anymore possible to establish if the claimed device
+            // creator of this key is authentic. The tooltip should be "The authenticity of this encrypted message can't be guaranteed on this device."
+            // It is not "Encrypted by an unknown or deleted device." even if the claimed device is actually deleted.
+            await expect(page.getByRole("tooltip")).toContainText(
+                "The authenticity of this encrypted message can't be guaranteed on this device.",
+            );
         });
 
         test("should show the correct shield on edited e2e events", async ({ page, app, bot: bob, homeserver }) => {

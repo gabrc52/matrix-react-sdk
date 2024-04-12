@@ -22,8 +22,8 @@ import type {
     Verifier,
     EmojiMapping,
     VerifierEvent,
-} from "matrix-js-sdk/src/crypto-api/verification";
-import type { ISasEvent } from "matrix-js-sdk/src/crypto/verification/SAS";
+    ShowSasCallbacks,
+} from "matrix-js-sdk/src/crypto-api";
 import { Credentials, HomeserverInstance } from "../../plugins/homeserver";
 import { Client } from "../../pages/client";
 import { ElementAppPage } from "../../pages/ElementAppPage";
@@ -36,9 +36,7 @@ import { ElementAppPage } from "../../pages/ElementAppPage";
 export async function waitForVerificationRequest(client: Client): Promise<JSHandle<VerificationRequest>> {
     return client.evaluateHandle((cli) => {
         return new Promise<VerificationRequest>((resolve) => {
-            console.log("~~");
             const onVerificationRequestEvent = async (request: VerificationRequest) => {
-                console.log("@@", request);
                 await request.accept();
                 resolve(request);
             };
@@ -65,7 +63,7 @@ export function handleSasVerification(verifier: JSHandle<Verifier>): Promise<Emo
         if (event) return event.sas.emoji;
 
         return new Promise<EmojiMapping[]>((resolve) => {
-            const onShowSas = (event: ISasEvent) => {
+            const onShowSas = (event: ShowSasCallbacks) => {
                 verifier.off("show_sas" as VerifierEvent, onShowSas);
                 event.confirm();
                 resolve(event.sas.emoji);
@@ -103,12 +101,35 @@ export async function checkDeviceIsCrossSigned(app: ElementAppPage): Promise<voi
 }
 
 /**
- * Check that the current device is connected to the key backup.
+ * Check that the current device is connected to the expected key backup.
+ * Also checks that the decryption key is known and cached locally.
+ *
+ * @param page - the page to check
+ * @param expectedBackupVersion - the version of the backup we expect to be connected to.
+ * @param checkBackupKeyInCache - whether to check that the backup key is cached locally.
  */
-export async function checkDeviceIsConnectedKeyBackup(page: Page) {
+export async function checkDeviceIsConnectedKeyBackup(
+    page: Page,
+    expectedBackupVersion: string,
+    checkBackupKeyInCache: boolean,
+): Promise<void> {
     await page.getByRole("button", { name: "User menu" }).click();
     await page.locator(".mx_UserMenu_contextMenu").getByRole("menuitem", { name: "Security & Privacy" }).click();
     await expect(page.locator(".mx_Dialog").getByRole("button", { name: "Restore from Backup" })).toBeVisible();
+
+    // expand the advanced section to see the active version in the reports
+    await page.locator(".mx_SecureBackupPanel_advanced").locator("..").click();
+
+    if (checkBackupKeyInCache) {
+        const cacheDecryptionKeyStatusElement = page.locator(".mx_SecureBackupPanel_statusList tr:nth-child(2) td");
+        await expect(cacheDecryptionKeyStatusElement).toHaveText("cached locally, well formed");
+    }
+
+    await expect(page.locator(".mx_SecureBackupPanel_statusList tr:nth-child(5) td")).toHaveText(
+        expectedBackupVersion + " (Algorithm: m.megolm_backup.v1.curve25519-aes-sha2)",
+    );
+
+    await expect(page.locator(".mx_SecureBackupPanel_statusList tr:nth-child(6) td")).toHaveText(expectedBackupVersion);
 }
 
 /**
@@ -236,4 +257,36 @@ export async function createSharedRoomWithUser(
     await expect(app.page.getByText(" joined the room", { exact: false })).toBeVisible();
 
     return roomId;
+}
+
+/**
+ * Send a message in the current room
+ * @param page
+ * @param message - The message text to send
+ */
+export async function sendMessageInCurrentRoom(page: Page, message: string): Promise<void> {
+    await page.locator(".mx_MessageComposer").getByRole("textbox").fill(message);
+    await page.getByTestId("sendmessagebtn").click();
+}
+
+/**
+ * Create a room with the given name and encryption status using the room creation dialog.
+ *
+ * @param roomName - The name of the room to create
+ * @param isEncrypted - Whether the room should be encrypted
+ */
+export async function createRoom(page: Page, roomName: string, isEncrypted: boolean): Promise<void> {
+    await page.getByRole("button", { name: "Add room" }).click();
+    await page.locator(".mx_IconizedContextMenu").getByRole("menuitem", { name: "New room" }).click();
+
+    const dialog = page.locator(".mx_Dialog");
+
+    await dialog.getByLabel("Name").fill(roomName);
+
+    if (!isEncrypted) {
+        // it's enabled by default
+        await page.getByLabel("Enable end-to-end encryption").click();
+    }
+
+    await dialog.getByRole("button", { name: "Create room" }).click();
 }
