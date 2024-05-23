@@ -27,7 +27,7 @@ import { notificationLevelToIndicator } from "../../../../utils/notifications";
 
 interface ThreadsActivityCentreButtonProps extends ComponentProps<typeof IconButton> {
     /**
-     * Display the `Treads` label next to the icon.
+     * Display the `Threads` label next to the icon.
      */
     displayLabel?: boolean;
     /**
@@ -45,7 +45,7 @@ export const ThreadsActivityCentreButton = forwardRef<HTMLButtonElement, Threads
         const openTooltip = displayLabel ? false : undefined;
 
         return (
-            <Tooltip label={_t("common|threads")} side="right" open={openTooltip}>
+            <Tooltip label={_t("common|threads")} placement="right" open={openTooltip}>
                 <IconButton
                     aria-label={_t("common|threads")}
                     className={classNames("mx_ThreadsActivityCentreButton", { expanded: displayLabel })}
