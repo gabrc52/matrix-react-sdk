@@ -1625,12 +1625,10 @@
             "custom_theme_success": "ערכת נושא התווספה בהצלחה!",
             "custom_theme_url": "כתובת ערכת נושא מותאמת אישית",
             "font_size": "גודל אותיות",
-            "heading": "התאם את התצוגה שלך",
             "image_size_default": "ברירת מחדל",
             "image_size_large": "גדול",
             "layout_bubbles": "בועות הודעות",
             "match_system_theme": "התאם לתבנית המערכת",
-            "subheading": "התאמת תצוגה משפיעה רק על התחברות זו %(brand)s.",
             "timeline_image_size": "גודל תמונה בציר הזמן"
         },
         "automatic_language_detection_syntax_highlight": "החל זיהוי שפה אוטומטי עבור הדגשת מבנה הכתיבה",
@@ -2309,9 +2307,6 @@
             "updated_rule_rooms": "%(senderName)s עדכן את הכלל שפאפשר חסימה של חדרים התואמים ל%(glob)s עבור %(reason)s",
             "updated_rule_servers": "%(senderName)s עדכן את הכללים המאפשרים חסימת שרתים התואמים ל%(glob)s עבור %(reason)s",
             "updated_rule_users": "%(senderName)s עדכן את הכלל שמאפשר חסימת משתמשים התואמים ל%(glob)s עבור %(reason)s"
-        },
-        "reactions": {
-            "tooltip": "<reactors/><reactedWith> הגיבו עם %(shortName)s</reactedWith>"
         },
         "redacted": {
             "tooltip": "הודעה נמחקה בתאריך %(date)s"

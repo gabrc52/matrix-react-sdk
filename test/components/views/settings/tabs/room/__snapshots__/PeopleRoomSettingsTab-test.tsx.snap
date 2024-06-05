@@ -27,7 +27,6 @@ exports[`PeopleRoomSettingsTab with requests to join renders requests fully 1`] 
         <img
           alt=""
           class="_image_mcap2_50"
-          crossorigin="anonymous"
           data-type="round"
           height="42px"
           loading="lazy"
@@ -70,7 +69,6 @@ exports[`PeopleRoomSettingsTab with requests to join renders requests fully 1`] 
       <div
         aria-label="Deny"
         class="mx_AccessibleButton mx_PeopleRoomSettingsTab_action mx_AccessibleButton_hasKind mx_AccessibleButton_kind_icon_primary_outline"
-        data-state="closed"
         role="button"
         tabindex="0"
       >
@@ -82,7 +80,6 @@ exports[`PeopleRoomSettingsTab with requests to join renders requests fully 1`] 
       <div
         aria-label="Approve"
         class="mx_AccessibleButton mx_PeopleRoomSettingsTab_action mx_AccessibleButton_hasKind mx_AccessibleButton_kind_icon_primary"
-        data-state="closed"
         role="button"
         tabindex="0"
       >
@@ -139,7 +136,6 @@ exports[`PeopleRoomSettingsTab with requests to join renders requests reduced 1`
       <div
         aria-label="Deny"
         class="mx_AccessibleButton mx_PeopleRoomSettingsTab_action mx_AccessibleButton_hasKind mx_AccessibleButton_kind_icon_primary_outline"
-        data-state="closed"
         role="button"
         tabindex="0"
       >
@@ -151,7 +147,6 @@ exports[`PeopleRoomSettingsTab with requests to join renders requests reduced 1`
       <div
         aria-label="Approve"
         class="mx_AccessibleButton mx_PeopleRoomSettingsTab_action mx_AccessibleButton_hasKind mx_AccessibleButton_kind_icon_primary"
-        data-state="closed"
         role="button"
         tabindex="0"
       >
