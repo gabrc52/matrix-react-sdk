@@ -31,6 +31,7 @@ import RoomSettingsDialog from "../../../../src/components/views/dialogs/RoomSet
 import MatrixClientContext from "../../../../src/contexts/MatrixClientContext";
 import SettingsStore from "../../../../src/settings/SettingsStore";
 import { UIFeature } from "../../../../src/settings/UIFeature";
+import DMRoomMap from "../../../../src/utils/DMRoomMap";
 
 describe("<RoomSettingsDialog />", () => {
     const userId = "@alice:server.org";
@@ -62,6 +63,11 @@ describe("<RoomSettingsDialog />", () => {
         });
 
         jest.spyOn(SettingsStore, "getValue").mockReset().mockReturnValue(false);
+
+        const dmRoomMap = {
+            getUserIdForRoomId: jest.fn(),
+        } as unknown as DMRoomMap;
+        jest.spyOn(DMRoomMap, "shared").mockReturnValue(dmRoomMap);
     });
 
     const getComponent = (onFinished = jest.fn(), propRoomId = roomId) =>
@@ -177,7 +183,7 @@ describe("<RoomSettingsDialog />", () => {
         it("displays poll history when tab clicked", () => {
             const { container } = getComponent();
 
-            fireEvent.click(screen.getByText("Poll history"));
+            fireEvent.click(screen.getByText("Polls"));
 
             expect(container.querySelector(".mx_SettingsTab")).toMatchSnapshot();
         });
